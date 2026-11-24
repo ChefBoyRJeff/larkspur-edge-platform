@@ -15,6 +15,6 @@
 |---|---|
 | ansible/ | Node configuration: inventory, roles (common, k3s_server, k3s_agent), site.yml |
 | platform/ | Cluster platform manifests |
-| docs/ | Plan, architecture decision records, AI-use log |
+| docs/ | Plan, architecture decision records, runbooks, AI-use log |
 
 Larkspur Logistics is fictional. All data in this repository is synthetic.
