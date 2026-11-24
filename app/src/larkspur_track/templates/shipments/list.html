@@ -3,6 +3,23 @@
 {% block content %}
 <h1>Shipments</h1>
 <p><a class="button" href="/shipments/new">Receive a shipment</a></p>
+<form class="search" method="get" action="/shipments">
+  <div>
+    <label for="q">Search</label>
+    <input id="q" name="q" value="{{ q }}" placeholder="Tracking number or consignee" maxlength="100">
+  </div>
+  <div>
+    <label for="status">Status</label>
+    <select id="status" name="status">
+      <option value="">All</option>
+      {% for option in statuses %}
+      <option value="{{ option }}"{% if option == status %} selected{% endif %}>{{ option }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <button type="submit">Search</button>
+  {% if q or status %}<a href="/shipments">Clear</a>{% endif %}
+</form>
 {% if shipments %}
 <table>
   <thead><tr><th>Tracking number</th><th>Consignee</th><th>Destination</th><th>Status</th><th>Received</th></tr></thead>
@@ -18,6 +35,9 @@
   {% endfor %}
   </tbody>
 </table>
+{% if shipments | length == limit %}<p>Showing the newest {{ limit }}. Search to narrow the list.</p>{% endif %}
+{% elif q or status %}
+<p>No shipments match.</p>
 {% else %}
 <p>No shipments yet.</p>
 {% endif %}

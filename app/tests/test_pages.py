@@ -1,13 +1,9 @@
 import uuid
-from collections.abc import Iterator
 
-import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from larkspur_track.db import get_session
-from larkspur_track.main import app
 from larkspur_track.models import Shipment
 
 FORM = {
@@ -16,16 +12,6 @@ FORM = {
     "destination": "Dock 4, Greensboro NC",
     "note": "",
 }
-
-
-@pytest.fixture
-def client(db_session: Session) -> Iterator[TestClient]:
-    """The app, using the test session that is rolled back after each test."""
-    app.dependency_overrides[get_session] = lambda: db_session
-    try:
-        yield TestClient(app, follow_redirects=False)
-    finally:
-        app.dependency_overrides.clear()
 
 
 def _count(session: Session) -> int:

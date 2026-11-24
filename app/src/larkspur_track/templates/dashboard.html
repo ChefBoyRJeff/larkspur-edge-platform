@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · Larkspur Track{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+<p>{{ total }} shipment{{ "" if total == 1 else "s" }} in total.</p>
+<div class="cards">
+{% for status, count in counts.items() %}
+  <a class="card" href="/shipments?status={{ status }}"><span class="count">{{ count }}</span><span>{{ status }}</span></a>
+{% endfor %}
+</div>
+{% endblock %}

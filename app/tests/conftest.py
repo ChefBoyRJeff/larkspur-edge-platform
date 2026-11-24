@@ -6,11 +6,13 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from larkspur_track.config import Settings, get_settings
-from larkspur_track.db import get_engine
+from larkspur_track.db import get_engine, get_session
+from larkspur_track.main import app
 
 APP_DIR = Path(__file__).resolve().parents[1]
 
@@ -73,3 +75,13 @@ def db_session(migrated_database: str) -> Iterator[Session]:
             session.close()
             transaction.rollback()
     engine.dispose()
+
+
+@pytest.fixture
+def client(db_session: Session) -> Iterator[TestClient]:
+    """The app, using the test session that is rolled back after each test."""
+    app.dependency_overrides[get_session] = lambda: db_session
+    try:
+        yield TestClient(app, follow_redirects=False)
+    finally:
+        app.dependency_overrides.clear()
