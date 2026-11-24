@@ -13,7 +13,7 @@
 ## Repository layout
 | Path | Contents |
 |---|---|
-| ansible/ | Node configuration: inventory, roles (common, k3s_server, k3s_agent), site.yml |
+| ansible/ | Node configuration: inventory, roles (common, k3s_server, k3s_agent), site.yml (configure), patch.yml (rolling OS updates) |
 | platform/ | Cluster platform manifests |
 | docs/ | Plan, architecture decision records, runbooks, AI-use log |
 
