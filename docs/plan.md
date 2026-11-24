@@ -63,6 +63,7 @@ Larkspur Logistics (fictional) opens a regional warehouse. Staff need shipment t
 | No internal DNS yet | hosts-file entries until Pi-hole (Phase 2) |
 | Switch firmware end-of-life | Admin access limited to the home network |
 | Internal root CA trusted by the admin PC (key compromise could impersonate any site) | Key stays in the cluster (cert-manager namespace); trusted for the current Windows user only; removable in certmgr.msc; name constraints considered later |
+| New pods have unrestricted network access for up to ~3 s, until kube-router programs their firewall chain (k3s sets kube-router's NetPolDefaultDeny to false and does not expose it) | Measured: blocked by t=3 s on both nodes; the API and kubelet still require authentication; only pinned, scanned images run; Cilium or Calico is the upgrade path |
 
 ## 8. Decisions
 | Decision | Module | Status |
