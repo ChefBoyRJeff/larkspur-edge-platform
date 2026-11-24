@@ -1,0 +1,20 @@
+# Cluster-wide platform configuration (issuers, namespaces, policies) from platform/config.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform-config
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ChefBoyRJeff/larkspur-edge-platform.git
+    targetRevision: main
+    path: platform/config
+    directory:
+      recurse: true
+  destination:
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

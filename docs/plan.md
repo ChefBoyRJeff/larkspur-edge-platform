@@ -62,6 +62,7 @@ Larkspur Logistics (fictional) opens a regional warehouse. Staff need shipment t
 | Data tied to one node | Backups + tested restore |
 | No internal DNS yet | hosts-file entries until Pi-hole (Phase 2) |
 | Switch firmware end-of-life | Admin access limited to the home network |
+| Internal root CA trusted by the admin PC (key compromise could impersonate any site) | Key stays in the cluster (cert-manager namespace); trusted for the current Windows user only; removable in certmgr.msc; name constraints considered later |
 
 ## 8. Decisions
 | Decision | Module | Status |

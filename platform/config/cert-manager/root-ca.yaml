@@ -1,0 +1,24 @@
+# Wave 1: Larkspur Labs root CA (10 years, ECDSA P-256). Private key stays in the cluster.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: larkspur-root-ca
+  namespace: cert-manager
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  isCA: true
+  commonName: Larkspur Labs Root CA
+  subject:
+    organizations:
+      - Larkspur Logistics (fictional)
+  secretName: larkspur-root-ca
+  duration: 87600h
+  renewBefore: 720h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: selfsigned-bootstrap
+    kind: ClusterIssuer
+    group: cert-manager.io
