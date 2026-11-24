@@ -25,7 +25,15 @@ OUT_OF_DATE = (
     "It now shows the current status."
 )
 
-templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
+
+def _release(request: Request) -> dict[str, str]:
+    """Every page shows which release is running, so a promotion or rollback is visible."""
+    return {"app_release": get_settings().app_release}
+
+
+templates = Jinja2Templates(
+    directory=Path(__file__).parent / "templates", context_processors=[_release]
+)
 
 
 def local_time(value: datetime) -> str:

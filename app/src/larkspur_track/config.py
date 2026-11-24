@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     display_timezone: str = "America/New_York"
     # Seconds to wait for PostgreSQL to accept a connection before giving up.
     database_connect_timeout: int = 3
+    # Release shown in the page footer; the Helm chart sets it to the deployed image tag.
+    app_release: str = "local"
 
     @field_validator("database_url", "test_database_url")
     @classmethod
