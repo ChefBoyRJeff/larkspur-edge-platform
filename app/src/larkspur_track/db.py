@@ -1,9 +1,10 @@
-"""Database engine and the declarative base for ORM models."""
+"""Database engine, request sessions and the declarative base for ORM models."""
 
+from collections.abc import Iterator
 from functools import lru_cache
 
 from sqlalchemy import Engine, MetaData, create_engine
-from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.orm import DeclarativeBase, Session
 
 from larkspur_track.config import get_settings
 
@@ -27,3 +28,9 @@ class Base(DeclarativeBase):
 def get_engine() -> Engine:
     """Create the engine on first use, so liveness checks never need the database."""
     return create_engine(get_settings().database_url, pool_pre_ping=True)
+
+
+def get_session() -> Iterator[Session]:
+    """One session per request. Routes commit after a successful change; errors roll back."""
+    with Session(get_engine()) as session:
+        yield session

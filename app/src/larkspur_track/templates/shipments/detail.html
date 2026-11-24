@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}{{ shipment.tracking_number }} · Larkspur Track{% endblock %}
+{% block content %}
+<p><a href="/shipments">&larr; All shipments</a></p>
+<h1>{{ shipment.tracking_number }} <span class="status">{{ shipment.status }}</span></h1>
+<p><strong>Consignee:</strong> {{ shipment.consignee }}<br><strong>Destination:</strong> {{ shipment.destination }}</p>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+{% if next_status %}
+<form class="stack" method="post" action="/shipments/{{ shipment.id }}/advance">
+  <input type="hidden" name="target" value="{{ next_status }}">
+  <label for="note">Note (optional)</label>
+  <textarea id="note" name="note" maxlength="500"></textarea>
+  <button type="submit">Mark as {{ next_status }}</button>
+</form>
+{% else %}
+<p>This shipment has shipped. There are no further steps.</p>
+{% endif %}
+<h2>Timeline</h2>
+<table>
+  <thead><tr><th>When</th><th>Change</th><th>Note</th></tr></thead>
+  <tbody>
+  {% for event in shipment.events %}
+    <tr>
+      <td>{{ event.occurred_at | local_time }}</td>
+      <td>{% if event.from_status %}{{ event.from_status }} → {% endif %}{{ event.to_status }}</td>
+      <td>{{ event.note or "" }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -5,10 +5,11 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from larkspur_track.db import get_engine
+from larkspur_track.routes import router
 
 
 def create_app() -> FastAPI:
-    """Build the application. Routes are registered here as modules are added."""
+    """Build the application: health checks plus the shipment pages."""
     app = FastAPI(title="Larkspur Track", version="0.1.0")
 
     @app.get("/healthz", include_in_schema=False)
@@ -26,6 +27,7 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=503, detail="database unavailable") from error
         return {"status": "ready"}
 
+    app.include_router(router)
     return app
 
 
