@@ -1,0 +1,40 @@
+- name: Drain node (move pods away)
+  ansible.builtin.command:
+    cmd: "k3s kubectl drain {{ inventory_hostname }} --ignore-daemonsets --delete-emptydir-data --timeout=300s"
+  delegate_to: "{{ groups['k3s_server'][0] }}"
+  register: patch_drain
+  changed_when: "'drained' in patch_drain.stdout"
+
+- name: Upgrade all packages
+  ansible.builtin.apt:
+    update_cache: true
+    upgrade: dist
+    autoremove: true
+  register: patch_apt
+
+- name: Check whether the OS requests a reboot
+  ansible.builtin.stat:
+    path: /var/run/reboot-required
+  register: patch_reboot_flag
+
+- name: Reboot when packages changed or a reboot is requested
+  ansible.builtin.reboot:
+    reboot_timeout: 900
+  when: patch_apt.changed or patch_reboot_flag.stat.exists
+
+- name: Node Ready again (checked from the server)
+  ansible.builtin.command:
+    cmd: "k3s kubectl get node {{ inventory_hostname }} -o jsonpath='{.status.conditions[?(@.type==\"Ready\")].status}'"
+  delegate_to: "{{ groups['k3s_server'][0] }}"
+  register: patch_ready
+  until: patch_ready.stdout == "True"
+  retries: 60
+  delay: 10
+  changed_when: false
+
+- name: Uncordon node (accept pods again)
+  ansible.builtin.command:
+    cmd: "k3s kubectl uncordon {{ inventory_hostname }}"
+  delegate_to: "{{ groups['k3s_server'][0] }}"
+  register: patch_uncordon
+  changed_when: "'already uncordoned' not in patch_uncordon.stdout"
