@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: test-page
+  namespace: larkspur-dev
+spec:
+  selector:
+    app.kubernetes.io/name: test-page
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
