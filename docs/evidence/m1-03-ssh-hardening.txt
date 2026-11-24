@@ -1,0 +1,9 @@
+=== M1-03 effective SSH settings after hardening, 11-24-2026 09:21 AM EST ===
+lark-k3s-01 | CHANGED | rc=0 >>
+permitrootlogin no
+passwordauthentication no
+kbdinteractiveauthentication no
+lark-k3s-02 | CHANGED | rc=0 >>
+permitrootlogin no
+passwordauthentication no
+kbdinteractiveauthentication no

@@ -1,0 +1,45 @@
+- name: Required packages present
+  ansible.builtin.apt:
+    name:
+      - curl
+      - ca-certificates
+    state: present
+    update_cache: true
+    cache_valid_time: 86400
+
+- name: Time zone set
+  community.general.timezone:
+    name: "{{ node_timezone }}"
+
+- name: Memory cgroup enabled on the kernel command line (k3s prerequisite)
+  ansible.builtin.lineinfile:
+    path: /boot/firmware/cmdline.txt
+    regexp: '^(?!.*cgroup_memory=1)(.*?)\s*$'
+    line: '\1 cgroup_memory=1 cgroup_enable=memory'
+    backrefs: true
+  notify: Reboot node
+
+- name: Sudo timestamp timeout for the admin user
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/larkadmin-timeout
+    content: "Defaults:{{ admin_user }} timestamp_timeout=30\n"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: /usr/sbin/visudo -cf %s
+
+- name: SSH hardening drop-in
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/10-larkspur.conf
+    content: |
+      # Managed by Ansible (larkspur-edge-platform)
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      PermitRootLogin no
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload sshd
+
+- name: Apply pending handlers before k3s work
+  ansible.builtin.meta: flush_handlers

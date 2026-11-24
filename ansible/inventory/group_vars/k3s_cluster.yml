@@ -1,0 +1,5 @@
+# Pinned: upgrades happen by changing this value in a pull request
+k3s_version: v1.37.2+k3s1
+k3s_server_ip: 192.168.1.199
+node_timezone: America/New_York
+admin_user: larkadmin

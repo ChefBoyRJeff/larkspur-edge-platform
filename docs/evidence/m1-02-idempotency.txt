@@ -1,0 +1,80 @@
+=== M1-02 idempotency: second run, 11-24-2026 09:21 AM EST ===
+Prediction: changed=0, failed=0 on both nodes
+
+PLAY [Base configuration for all cluster nodes] ********************************
+
+TASK [Gathering Facts] *********************************************************
+ok: [lark-k3s-01]
+ok: [lark-k3s-02]
+
+TASK [common : Required packages present] **************************************
+ok: [lark-k3s-02]
+ok: [lark-k3s-01]
+
+TASK [common : Time zone set] **************************************************
+ok: [lark-k3s-01]
+ok: [lark-k3s-02]
+
+TASK [common : Memory cgroup enabled on the kernel command line (k3s prerequisite)] ***
+ok: [lark-k3s-01]
+ok: [lark-k3s-02]
+
+TASK [common : Sudo timestamp timeout for the admin user] **********************
+ok: [lark-k3s-02]
+ok: [lark-k3s-01]
+
+TASK [common : SSH hardening drop-in] ******************************************
+ok: [lark-k3s-01]
+ok: [lark-k3s-02]
+
+TASK [common : Apply pending handlers before k3s work] *************************
+
+TASK [common : Apply pending handlers before k3s work] *************************
+
+PLAY [Control plane (k3s server)] **********************************************
+
+TASK [Gathering Facts] *********************************************************
+ok: [lark-k3s-01]
+
+TASK [k3s_server : Install script for k3s present] *****************************
+ok: [lark-k3s-01]
+
+TASK [k3s_server : Server installed at the pinned k3s version] *****************
+ok: [lark-k3s-01]
+
+TASK [k3s_server : Server service enabled and running] *************************
+ok: [lark-k3s-01]
+
+TASK [k3s_server : Server node Ready] ******************************************
+ok: [lark-k3s-01]
+
+TASK [k3s_server : Read node join token] ***************************************
+ok: [lark-k3s-01]
+
+TASK [k3s_server : Keep join token in memory for agents] ***********************
+ok: [lark-k3s-01]
+
+PLAY [Workers (k3s agents)] ****************************************************
+
+TASK [Gathering Facts] *********************************************************
+ok: [lark-k3s-02]
+
+TASK [k3s_agent : Install script for k3s present] ******************************
+ok: [lark-k3s-02]
+
+TASK [k3s_agent : Agent installed at the pinned k3s version and joined] ********
+ok: [lark-k3s-02]
+
+TASK [k3s_agent : Agent service enabled and running] ***************************
+ok: [lark-k3s-02]
+
+TASK [k3s_agent : Agent node Ready (checked from the server)] ******************
+ok: [lark-k3s-02 -> lark-k3s-01(192.168.1.199)]
+
+TASK [k3s_agent : Worker role label present] ***********************************
+ok: [lark-k3s-02 -> lark-k3s-01(192.168.1.199)]
+
+PLAY RECAP *********************************************************************
+lark-k3s-01                : ok=13   changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+lark-k3s-02                : ok=12   changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+

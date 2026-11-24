@@ -1,0 +1,8 @@
+- name: Reboot node
+  ansible.builtin.reboot:
+    reboot_timeout: 600
+
+- name: Reload sshd
+  ansible.builtin.service:
+    name: ssh
+    state: reloaded
