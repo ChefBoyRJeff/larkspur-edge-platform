@@ -3,7 +3,7 @@ name = "larkspur-track"
 version = "0.1.0"
 description = "Offline-first warehouse shipment tracking for the (fictional) Larkspur Logistics."
 authors = [
-    { name = "Jeff Jones", email = "156028335+ChefBoyRJeff@users.noreply.github.com" }
+    { name = "Jeff Jones" }
 ]
 requires-python = ">=3.14"
 dependencies = [
@@ -31,10 +31,11 @@ select = ["E", "F", "I", "B", "UP", "S"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+filterwarnings = ["error"]
 
 [dependency-groups]
 dev = [
-    "httpx>=0.28.1",
+    "httpx2>=2.16.2",
     "pytest>=9.2.0",
     "ruff>=0.17.6",
 ]
