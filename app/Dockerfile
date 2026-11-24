@@ -25,6 +25,9 @@ RUN test -f /app/.venv/lib/python3.14/site-packages/larkspur_track/templates/bas
 FROM python:3.14-slim-trixie AS runtime
 RUN groupadd --system --gid 10001 larkspur \
     && useradd --system --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin larkspur
+# The base image ships pip, which carries its own copies of urllib3, msgpack and setuptools.
+# The app never uses pip at runtime (uv installed everything in the build stage), so remove it.
+RUN python -m pip uninstall --yes pip
 WORKDIR /app
 COPY --from=build /app/.venv /app/.venv
 # Migrations run from this image as a Kubernetes job before each release.
