@@ -1,0 +1,36 @@
+# CloudNativePG operator. Runs PostgreSQL clusters declared as Cluster resources.
+# CRDs are about 1.3 MB, larger than client-side apply's annotation limit: ServerSideApply is required.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cloudnative-pg
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://cloudnative-pg.github.io/charts
+    chart: cloudnative-pg
+    targetRevision: 0.29.2
+    helm:
+      valuesObject:
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            memory: 256Mi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cnpg-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    managedNamespaceMetadata:
+      labels:
+        pod-security.kubernetes.io/enforce: restricted
+        pod-security.kubernetes.io/audit: restricted
+        pod-security.kubernetes.io/warn: restricted
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
