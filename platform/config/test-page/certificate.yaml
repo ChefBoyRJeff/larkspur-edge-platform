@@ -1,0 +1,20 @@
+# TLS certificate from the Larkspur internal CA; cert-manager renews it automatically.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: test-page-tls
+  namespace: larkspur-dev
+spec:
+  secretName: test-page-tls
+  dnsNames:
+    - test.larkspur.home.arpa
+  duration: 2160h
+  renewBefore: 360h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  issuerRef:
+    name: larkspur-ca
+    kind: ClusterIssuer
+    group: cert-manager.io
