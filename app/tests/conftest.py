@@ -7,7 +7,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session
 
 from larkspur_track.config import Settings, get_settings
@@ -62,11 +62,18 @@ def migrated_database(test_database_url: str, alembic_config: Config) -> str:
     return test_database_url
 
 
-@pytest.fixture
-def db_session(migrated_database: str) -> Iterator[Session]:
-    """A session inside a transaction that is rolled back after the test, leaving no data."""
+@pytest.fixture(scope="session")
+def test_engine(migrated_database: str) -> Iterator[Engine]:
+    """One engine (connection pool) for the whole run, instead of a new one per test."""
     engine = create_engine(migrated_database)
-    with engine.connect() as connection:
+    yield engine
+    engine.dispose()
+
+
+@pytest.fixture
+def db_session(test_engine: Engine) -> Iterator[Session]:
+    """A session inside a transaction that is rolled back after the test, leaving no data."""
+    with test_engine.connect() as connection:
         transaction = connection.begin()
         session = Session(bind=connection, join_transaction_mode="create_savepoint")
         try:
@@ -74,7 +81,6 @@ def db_session(migrated_database: str) -> Iterator[Session]:
         finally:
             session.close()
             transaction.rollback()
-    engine.dispose()
 
 
 @pytest.fixture

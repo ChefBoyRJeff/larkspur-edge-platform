@@ -26,8 +26,17 @@ class Base(DeclarativeBase):
 
 @lru_cache
 def get_engine() -> Engine:
-    """Create the engine on first use, so liveness checks never need the database."""
-    return create_engine(get_settings().database_url, pool_pre_ping=True)
+    """Create the engine on first use, so liveness checks never need the database.
+
+    The connect timeout keeps /readyz fast when PostgreSQL is unreachable, instead of
+    waiting for the operating system to give up on the connection.
+    """
+    settings = get_settings()
+    return create_engine(
+        settings.database_url,
+        pool_pre_ping=True,
+        connect_args={"connect_timeout": settings.database_connect_timeout},
+    )
 
 
 def get_session() -> Iterator[Session]:

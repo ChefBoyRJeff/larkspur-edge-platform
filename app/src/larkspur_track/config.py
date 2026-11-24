@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     database_url: str
     test_database_url: str | None = None
     display_timezone: str = "America/New_York"
+    # Seconds to wait for PostgreSQL to accept a connection before giving up.
+    database_connect_timeout: int = 3
 
 
 @lru_cache

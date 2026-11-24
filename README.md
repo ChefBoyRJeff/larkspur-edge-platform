@@ -1,5 +1,7 @@
 # Larkspur Edge Platform
 
+[![CI](https://github.com/ChefBoyRJeff/larkspur-edge-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/ChefBoyRJeff/larkspur-edge-platform/actions/workflows/ci.yml)
+
 **Larkspur Track**: an offline-first shipment tracking system for a (fictional) Larkspur Logistics regional warehouse, running on a 2-node **k3s** Kubernetes cluster of Raspberry Pi 5s, built and operated with production practices: Ansible, GitHub Actions, Argo CD (GitOps), cert-manager, Sealed Secrets, CloudNativePG, Prometheus/Grafana, and Azure for off-site backups and sync.
 
 > **Status:** Foundation, Infrastructure and Platform done; Application core done; CI/CD next. See [docs/plan.md](docs/plan.md).
