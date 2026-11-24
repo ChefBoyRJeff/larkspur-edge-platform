@@ -65,5 +65,6 @@ Both app namespaces enforce the `restricted` Pod Security profile, deny all netw
 | app/ | Larkspur Track (FastAPI, Jinja2, PostgreSQL): uv project, source in src/larkspur_track/, tests in tests/ |
 | platform/ | GitOps manifests: bootstrap/ (root app), apps/ (Argo CD Applications), argocd/ (Argo CD Helm values), config/ (CA issuers, app namespaces and guardrails, HTTPS test page) |
 | docs/ | Plan, architecture decision records, runbooks, AI-use log |
+| .github/ | CI: pull request checks, multi-arch image builds to GHCR (amd64 + arm64), Dependabot |
 
 Larkspur Logistics is fictional. All data in this repository is synthetic.
