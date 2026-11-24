@@ -1,0 +1,32 @@
+=== M0-02 self-healing test (whoami, 2 replicas, NodePort 30080), 11-24-2026 08:49 AM EST ===
+Prediction (recorded before test): 0 failed requests; replacement pod created within ~10 s; new pod receives traffic only after its readiness probe passes.
+NAME                      READY   STATUS    RESTARTS   AGE   IP           NODE          NOMINATED NODE   READINESS GATES
+whoami-5fc465f96f-bbdfr   1/1     Running   0          27m   10.42.1.4    lark-k3s-02   <none>           <none>
+whoami-5fc465f96f-sgl8z   1/1     Running   0          33m   10.42.0.10   lark-k3s-01   <none>           <none>
+--- deleting whoami-5fc465f96f-bbdfr at 08:49:44 AM ---
+pod "whoami-5fc465f96f-bbdfr" deleted from lark-demo namespace
+08:49:45 AM  Hostname: whoami-5fc465f96f-sgl8z
+08:49:46 AM  Hostname: whoami-5fc465f96f-sgl8z
+08:49:47 AM  Hostname: whoami-5fc465f96f-q9gk6
+08:49:48 AM  Hostname: whoami-5fc465f96f-q9gk6
+08:49:49 AM  Hostname: whoami-5fc465f96f-sgl8z
+08:49:50 AM  Hostname: whoami-5fc465f96f-q9gk6
+08:49:51 AM  Hostname: whoami-5fc465f96f-q9gk6
+08:49:52 AM  Hostname: whoami-5fc465f96f-sgl8z
+08:49:53 AM  Hostname: whoami-5fc465f96f-sgl8z
+08:49:54 AM  Hostname: whoami-5fc465f96f-q9gk6
+08:49:55 AM  Hostname: whoami-5fc465f96f-q9gk6
+08:49:56 AM  Hostname: whoami-5fc465f96f-sgl8z
+--- result: 0 of 12 requests failed ---
+NAME                      READY   STATUS    RESTARTS   AGE   IP           NODE          NOMINATED NODE   READINESS GATES
+whoami-5fc465f96f-q9gk6   1/1     Running   0          13s   10.42.1.5    lark-k3s-02   <none>           <none>
+whoami-5fc465f96f-sgl8z   1/1     Running   0          33m   10.42.0.10   lark-k3s-01   <none>           <none>
+27m         Normal   Pulled              pod/whoami-5fc465f96f-bbdfr    Successfully pulled image "traefik/whoami" in 487ms (487ms including waiting). Image size: 4701289 bytes.
+27m         Normal   Pulling             pod/whoami-5fc465f96f-bbdfr    Pulling image "traefik/whoami"
+13s         Normal   Killing             pod/whoami-5fc465f96f-bbdfr    Stopping container whoami
+13s         Normal   Pulling             pod/whoami-5fc465f96f-q9gk6    Pulling image "traefik/whoami"
+13s         Normal   SuccessfulCreate    replicaset/whoami-5fc465f96f   Created pod: whoami-5fc465f96f-q9gk6
+12s         Normal   Started             pod/whoami-5fc465f96f-q9gk6    Container started
+12s         Normal   Created             pod/whoami-5fc465f96f-q9gk6    Container created
+12s         Normal   Pulled              pod/whoami-5fc465f96f-q9gk6    Successfully pulled image "traefik/whoami" in 470ms (470ms including waiting). Image size: 4701289 bytes.
+--- cleanup: lark-demo namespace present after delete: False ---

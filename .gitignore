@@ -1,0 +1,19 @@
+# cluster credentials and secrets - never commit
+*kubeconfig*
+k3s.yaml
+*.token
+node-token
+*.secret.yaml
+*-secret.local.yaml
+.env
+.env.*
+*.local.*
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+# editor / OS
+.vscode/
+Thumbs.db
