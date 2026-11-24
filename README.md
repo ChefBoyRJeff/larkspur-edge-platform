@@ -4,7 +4,7 @@
 
 **Larkspur Track**: an offline-first shipment tracking system for a (fictional) Larkspur Logistics regional warehouse, running on a 2-node **k3s** Kubernetes cluster of Raspberry Pi 5s, built and operated with production practices: Ansible, GitHub Actions, Argo CD (GitOps), cert-manager, Sealed Secrets, CloudNativePG, Prometheus/Grafana, and Azure for off-site backups and sync.
 
-> **Status:** Foundation, Infrastructure and Platform done; Application core done; CI/CD next. See [docs/plan.md](docs/plan.md).
+> **Status:** Foundation, Infrastructure, Platform and CI/CD done; Application core done, sign-in next. See [docs/plan.md](docs/plan.md).
 
 | Host | Hardware | Role |
 |---|---|---|
@@ -17,12 +17,14 @@
 ```mermaid
 flowchart LR
   subgraph PC["Admin PC (Windows 11)"]
-    dev["VS Code, Git, kubectl, Helm"]
+    dev["VS Code, Git, kubectl"]
     wsl["WSL: Ansible"]
     browser["Browser<br/>trusts Larkspur Labs Root CA"]
   end
 
   gh[("GitHub<br/>larkspur-edge-platform")]
+  actions["GitHub Actions<br/>tests, chart checks,<br/>amd64 + arm64 images, Trivy"]
+  ghcr[("GHCR<br/>larkspur-track:sha-commit")]
 
   subgraph SITE["Home network, lark-sw01 switch"]
     subgraph NODES["Raspberry Pi 5 nodes"]
@@ -33,30 +35,48 @@ flowchart LR
       argocd["Argo CD<br/>app-of-apps, self-managed"]
       cm["cert-manager<br/>larkspur-ca issuer"]
       ss["Sealed Secrets"]
+      cnpg["CloudNativePG operator"]
       traefik["Traefik ingress<br/>HTTPS only"]
       subgraph DEVNS["larkspur-dev"]
-        page["test-page<br/>2 replicas"]
+        devapp["Larkspur Track<br/>2 replicas"]
+        devdb[("larkspur-db<br/>PostgreSQL 18")]
       end
       subgraph PRODNS["larkspur-prod"]
-        app["Larkspur Track<br/>(Application module)"]
+        prodapp["Larkspur Track<br/>2 replicas"]
+        proddb[("larkspur-db<br/>PostgreSQL 18")]
       end
     end
   end
 
   dev -->|"pull request + merge"| gh
-  gh -->|"desired state"| argocd
-  argocd -->|"syncs"| cm
-  argocd -->|"syncs"| ss
-  argocd -->|"syncs"| page
-  argocd -.->|"planned"| app
+  gh -->|"runs"| actions
+  actions -->|"pushes image"| ghcr
+  gh -->|"desired state: chart + values per environment"| argocd
+  argocd -->|"syncs"| devapp
+  argocd -->|"syncs"| prodapp
+  ghcr -->|"image pull"| devapp
+  ghcr -->|"image pull"| prodapp
+  cnpg -.->|"runs"| devdb
+  cnpg -.->|"runs"| proddb
+  devapp --> devdb
+  prodapp --> proddb
   wsl -->|"SSH: site.yml, patch.yml"| n1
   wsl -->|"SSH"| n2
-  browser -->|"https://test.larkspur.home.arpa"| traefik
-  traefik -->|"allowed by NetworkPolicy"| page
-  cm -.->|"TLS certificate"| traefik
+  browser -->|"HTTPS"| traefik
+  traefik -->|"track-dev.larkspur.home.arpa"| devapp
+  traefik -->|"track.larkspur.home.arpa"| prodapp
+  cm -.->|"TLS certificates"| traefik
 ```
 
-Both app namespaces enforce the `restricted` Pod Security profile, deny all network traffic by default (DNS excepted), and give the `larkspur-developers` group edit access in dev and read-only access in prod.
+Both app namespaces enforce the `restricted` Pod Security profile, deny all network traffic by default (DNS excepted), and give the `larkspur-developers` group edit access in dev and read-only access in prod. Network policies admit only Traefik to the app and only the app to its database.
+
+## Environments
+| Environment | URL | Namespace | Release (image tag) set in |
+|---|---|---|---|
+| dev | https://track-dev.larkspur.home.arpa | larkspur-dev | charts/larkspur-track/values-dev.yaml |
+| prod | https://track.larkspur.home.arpa | larkspur-prod | charts/larkspur-track/values-prod.yaml |
+
+Releases are pull requests that change the image tag; rollbacks are reverts. See [docs/runbooks/release-and-rollback.md](docs/runbooks/release-and-rollback.md).
 
 ## Repository layout
 | Path | Contents |
