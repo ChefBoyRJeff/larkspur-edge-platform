@@ -11,7 +11,7 @@ Larkspur Track needs the same manifests in dev and prod with a few differences (
 - **Immutable image tags:** each environment names a `sha-<commit>` tag. Releasing to an environment is a pull request that changes that tag; rolling back is reverting it.
 - **Migrations as an Argo CD Sync hook**, ordered by sync waves: network policies (wave -1), then the `alembic upgrade head` job (wave 0), then the Deployment (wave 1). A failed migration stops the sync before any new pod starts, and the running release keeps serving.
 - **The database is not part of the chart.** The CloudNativePG cluster lives in `platform/config/databases/`, so removing or reinstalling the app never touches its data.
-- **Pods:** restricted security context, read-only root filesystem, no service account token, readiness on `/readyz` (database reachable), liveness on `/healthz` (process alive), rolling updates with no unavailable pods.
+- **Pods:** restricted security context, read-only root filesystem, no service account token, readiness on `/readyz` (database reachable), liveness on `/healthz` (process alive), rolling updates with no unavailable pods, and a 5 s `preStop` pause so Traefik stops routing to a pod before it exits (without it, a measured restart failed 2 of about 96 requests with 502s and timeouts).
 
 ## Alternatives considered
 - **Kustomize overlays:** no templating to learn, but per-environment patches get harder to read than a short values file.

@@ -28,6 +28,7 @@ spec:
         app.kubernetes.io/component: web
     spec:
       automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
       securityContext:
         {{- include "larkspur-track.podSecurityContext" . | nindent 8 }}
       topologySpreadConstraints:
@@ -54,7 +55,9 @@ spec:
             httpGet:
               path: /readyz
               port: http
-            periodSeconds: 10
+            # uvicorn needs a moment to start listening; probing at once only logs a failure.
+            initialDelaySeconds: 3
+            periodSeconds: 5
             timeoutSeconds: 5
             failureThreshold: 3
           # Alive as long as the process serves HTTP; a database outage never restarts pods.
@@ -65,6 +68,12 @@ spec:
             periodSeconds: 20
             timeoutSeconds: 5
             failureThreshold: 3
+          # On shutdown, Kubernetes removes the pod from the Service and signals it at the same time;
+          # Traefik sees the removal a moment later. Keep serving during that window.
+          lifecycle:
+            preStop:
+              sleep:
+                seconds: {{ .Values.shutdownDelaySeconds }}
           resources:
             {{- include "larkspur-track.resources" .Values.resources | nindent 12 }}
           securityContext:
