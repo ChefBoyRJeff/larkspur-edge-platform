@@ -9,7 +9,6 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -17,6 +16,7 @@ from larkspur_track.config import get_settings
 from larkspur_track.db import get_session
 from larkspur_track.forms import clean_note, parse_shipment_form
 from larkspur_track.models import Shipment
+from larkspur_track.queries import SEARCH_LIMIT, count_by_status, search_shipments
 from larkspur_track.services import ShipmentNotFoundError, advance_shipment, create_shipment
 from larkspur_track.workflow import InvalidTransitionError, ShipmentStatus, next_status
 
@@ -68,11 +68,29 @@ def home() -> RedirectResponse:
 
 
 @router.get("/shipments")
-def list_shipments(request: Request, session: SessionDep) -> HTMLResponse:
-    shipments = session.scalars(
-        select(Shipment).order_by(Shipment.created_at.desc()).limit(50)
-    ).all()
-    return _render(request, "shipments/list.html", {"shipments": shipments})
+def list_shipments(
+    request: Request, session: SessionDep, q: str = "", status: str = ""
+) -> HTMLResponse:
+    query = q.strip()[:100]
+    try:
+        status_filter = ShipmentStatus(status) if status else None
+    except ValueError:
+        status_filter = None
+    shipments = search_shipments(session, query=query, status=status_filter)
+    context = {
+        "shipments": shipments,
+        "q": query,
+        "status": status_filter,
+        "statuses": list(ShipmentStatus),
+        "limit": SEARCH_LIMIT,
+    }
+    return _render(request, "shipments/list.html", context)
+
+
+@router.get("/dashboard")
+def dashboard(request: Request, session: SessionDep) -> HTMLResponse:
+    counts = count_by_status(session)
+    return _render(request, "dashboard.html", {"counts": counts, "total": sum(counts.values())})
 
 
 @router.get("/shipments/new")
