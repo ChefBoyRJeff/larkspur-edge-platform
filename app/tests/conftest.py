@@ -1,11 +1,18 @@
 """Shared fixtures. Database tests use TEST_DATABASE_URL (see docs/runbooks/local-dev.md)."""
 
 from collections.abc import Callable, Iterator
+from pathlib import Path
 
 import pytest
+from alembic import command
+from alembic.config import Config
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
 
 from larkspur_track.config import Settings, get_settings
 from larkspur_track.db import get_engine
+
+APP_DIR = Path(__file__).resolve().parents[1]
 
 
 def _reset_database_caches() -> None:
@@ -23,6 +30,13 @@ def test_database_url() -> str:
     return url
 
 
+@pytest.fixture(scope="session")
+def alembic_config() -> Config:
+    config = Config(str(APP_DIR / "alembic.ini"))
+    config.set_main_option("script_location", str(APP_DIR / "migrations"))
+    return config
+
+
 @pytest.fixture
 def use_database(monkeypatch: pytest.MonkeyPatch) -> Iterator[Callable[[str], None]]:
     """Point the app at a given database URL for one test, then restore."""
@@ -33,3 +47,29 @@ def use_database(monkeypatch: pytest.MonkeyPatch) -> Iterator[Callable[[str], No
 
     yield _use
     _reset_database_caches()
+
+
+@pytest.fixture(scope="session")
+def migrated_database(test_database_url: str, alembic_config: Config) -> str:
+    """The test database upgraded to the latest migration, once per test run."""
+    with pytest.MonkeyPatch.context() as patch:
+        _reset_database_caches()
+        patch.setenv("DATABASE_URL", test_database_url)
+        command.upgrade(alembic_config, "head")
+        _reset_database_caches()
+    return test_database_url
+
+
+@pytest.fixture
+def db_session(migrated_database: str) -> Iterator[Session]:
+    """A session inside a transaction that is rolled back after the test, leaving no data."""
+    engine = create_engine(migrated_database)
+    with engine.connect() as connection:
+        transaction = connection.begin()
+        session = Session(bind=connection, join_transaction_mode="create_savepoint")
+        try:
+            yield session
+        finally:
+            session.close()
+            transaction.rollback()
+    engine.dispose()
