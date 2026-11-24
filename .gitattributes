@@ -1,0 +1,5 @@
+# Force LF line endings: shell, YAML and Ansible files break with CRLF on Linux
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.pdf binary

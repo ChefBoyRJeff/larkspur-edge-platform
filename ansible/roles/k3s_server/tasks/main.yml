@@ -1,0 +1,39 @@
+- name: Install script for k3s present
+  ansible.builtin.get_url:
+    url: https://get.k3s.io
+    dest: /usr/local/bin/k3s-install.sh
+    mode: "0755"
+
+- name: Server installed at the pinned k3s version
+  ansible.builtin.command:
+    cmd: /usr/local/bin/k3s-install.sh server
+    creates: /etc/systemd/system/k3s.service
+  environment:
+    INSTALL_K3S_VERSION: "{{ k3s_version }}"
+
+- name: Server service enabled and running
+  ansible.builtin.service:
+    name: k3s
+    state: started
+    enabled: true
+
+- name: Server node Ready
+  ansible.builtin.command:
+    cmd: "k3s kubectl get node {{ inventory_hostname }} -o jsonpath='{.status.conditions[?(@.type==\"Ready\")].status}'"
+  register: k3s_server_ready
+  until: k3s_server_ready.stdout == "True"
+  retries: 30
+  delay: 10
+  changed_when: false
+  check_mode: false
+
+- name: Read node join token
+  ansible.builtin.slurp:
+    src: /var/lib/rancher/k3s/server/node-token
+  register: k3s_server_token_raw
+  no_log: true
+
+- name: Keep join token in memory for agents
+  ansible.builtin.set_fact:
+    k3s_server_node_token: "{{ k3s_server_token_raw.content | b64decode | trim }}"
+  no_log: true

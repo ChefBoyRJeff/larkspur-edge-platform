@@ -1,0 +1,39 @@
+- name: Install script for k3s present
+  ansible.builtin.get_url:
+    url: https://get.k3s.io
+    dest: /usr/local/bin/k3s-install.sh
+    mode: "0755"
+
+- name: Agent installed at the pinned k3s version and joined
+  ansible.builtin.command:
+    cmd: /usr/local/bin/k3s-install.sh agent
+    creates: /etc/systemd/system/k3s-agent.service
+  environment:
+    INSTALL_K3S_VERSION: "{{ k3s_version }}"
+    K3S_URL: "https://{{ k3s_server_ip }}:6443"
+    K3S_TOKEN: "{{ hostvars[groups['k3s_server'][0]].k3s_server_node_token }}"
+  no_log: true
+
+- name: Agent service enabled and running
+  ansible.builtin.service:
+    name: k3s-agent
+    state: started
+    enabled: true
+
+- name: Agent node Ready (checked from the server)
+  ansible.builtin.command:
+    cmd: "k3s kubectl get node {{ inventory_hostname }} -o jsonpath='{.status.conditions[?(@.type==\"Ready\")].status}'"
+  delegate_to: "{{ groups['k3s_server'][0] }}"
+  register: k3s_agent_ready
+  until: k3s_agent_ready.stdout == "True"
+  retries: 30
+  delay: 10
+  changed_when: false
+  check_mode: false
+
+- name: Worker role label present
+  ansible.builtin.command:
+    cmd: "k3s kubectl label node {{ inventory_hostname }} node-role.kubernetes.io/worker=worker --overwrite"
+  delegate_to: "{{ groups['k3s_server'][0] }}"
+  register: k3s_agent_worker_label
+  changed_when: "'not labeled' not in k3s_agent_worker_label.stdout"
