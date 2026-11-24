@@ -39,8 +39,8 @@ Larkspur Logistics (fictional) opens a regional warehouse. Staff need shipment t
 | Module | Scope | Done when | Status |
 |---|---|---|---|
 | Foundation | Repository, plan, ADR-0001, conventions | Repo structure, .gitignore, .gitattributes, plan approved; k3s cluster running | Done |
-| Infrastructure | Ansible: base configuration, SSH hardening, k3s at a pinned version | Second playbook run reports 0 changes; lark-k3s-02 rebuilt from a blank card by the playbook rejoins Ready | In progress |
-| Platform | Argo CD, cert-manager + internal CA, Sealed Secrets, dev/prod namespaces, RBAC, restricted pod security, default-deny network policies | A test page is served over trusted HTTPS by hostname; default-deny and restricted pod security enforced | Planned |
+| Infrastructure | Ansible: base configuration, SSH hardening, k3s at a pinned version | Second playbook run reports 0 changes; lark-k3s-02 rebuilt from a blank card by the playbook rejoins Ready | Done |
+| Platform | Argo CD, cert-manager + internal CA, Sealed Secrets, dev/prod namespaces, RBAC, restricted pod security, default-deny network policies | A test page is served over trusted HTTPS by hostname; default-deny and restricted pod security enforced | Done |
 | Application | Larkspur Track: shipments, status workflow (received -> stored -> picked -> shipped), timeline, search, dashboard, Alembic migrations, sign-in, clerk/supervisor/admin roles, audit trail | Invalid transitions rejected; migrations apply cleanly; unit tests pass; argon2 password hashing; per-role permissions tested; every change audited | Planned |
 | CI/CD | GitHub Actions, arm64 + amd64 images, Trivy, versioned GHCR images, Helm chart, Argo CD dev -> prod by pull request | PRs run lint + tests; merges build both architectures; promotion by PR; rollback by revert works | Planned |
 | Data | CloudNativePG, scheduled backups to Azure Blob, restore | Azure cost approved first; restore to a new instance works; RPO/RTO targets met | Planned |
