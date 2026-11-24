@@ -47,6 +47,9 @@ spec:
             {{- include "larkspur-track.databaseEnv" . | nindent 12 }}
             - name: DISPLAY_TIMEZONE
               value: {{ .Values.displayTimezone | quote }}
+            # Shown in the page footer, so anyone can see which release an environment runs.
+            - name: APP_RELEASE
+              value: {{ .Values.image.tag | quote }}
           ports:
             - name: http
               containerPort: 8000
