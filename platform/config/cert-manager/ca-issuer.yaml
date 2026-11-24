@@ -1,0 +1,10 @@
+# Wave 2: issuer every app uses for TLS certificates.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: larkspur-ca
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  ca:
+    secretName: larkspur-root-ca
