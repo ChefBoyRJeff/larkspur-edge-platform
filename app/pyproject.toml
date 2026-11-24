@@ -3,7 +3,7 @@ name = "larkspur-track"
 version = "0.1.0"
 description = "Offline-first warehouse shipment tracking for the (fictional) Larkspur Logistics."
 authors = [
-    { name = "Jeff Jones", email = "156028335+ChefBoyRJeff@users.noreply.github.com" }
+    { name = "Jeff Jones" }
 ]
 requires-python = ">=3.14"
 dependencies = [
