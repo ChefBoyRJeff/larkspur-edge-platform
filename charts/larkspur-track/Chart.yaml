@@ -1,0 +1,6 @@
+apiVersion: v2
+name: larkspur-track
+description: Larkspur Track shipment tracker (FastAPI + PostgreSQL) for the Larkspur edge cluster.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

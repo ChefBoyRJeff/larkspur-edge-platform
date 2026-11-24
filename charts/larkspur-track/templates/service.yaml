@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: larkspur-track
+  labels:
+    {{- include "larkspur-track.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "larkspur-track.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

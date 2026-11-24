@@ -1,0 +1,38 @@
+# Runs "alembic upgrade head" on every sync, after the network policies (wave -1) and before the
+# web pods (wave 1). If it fails, the sync stops and the running release keeps serving.
+# No ttlSecondsAfterFinished: Argo CD must be able to read the finished job.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: larkspur-track-migrate
+  labels:
+    {{- include "larkspur-track.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migrate
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  backoffLimit: {{ .Values.migration.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.migration.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        {{- include "larkspur-track.labels" . | nindent 8 }}
+        app.kubernetes.io/component: migrate
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "larkspur-track.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: migrate
+          image: {{ include "larkspur-track.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["alembic", "upgrade", "head"]
+          env:
+            {{- include "larkspur-track.databaseEnv" . | nindent 12 }}
+          resources:
+            {{- include "larkspur-track.resources" .Values.resources | nindent 12 }}
+          securityContext:
+            {{- include "larkspur-track.containerSecurityContext" . | nindent 12 }}
