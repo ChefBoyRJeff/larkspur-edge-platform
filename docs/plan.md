@@ -60,6 +60,7 @@ Larkspur Logistics (fictional) opens a regional warehouse. Staff need shipment t
 | SD card wear (Postgres, Prometheus) | Short retention, limited writes; USB SSD as the upgrade path |
 | Single control plane | Accepted for v1; backups + Ansible allow a full rebuild |
 | Data tied to one node | Backups + tested restore |
+| Prod database has no backups until the Data module | Prod holds synthetic data only until then; scheduled backups and a tested restore are the Data module's first deliverable |
 | No internal DNS yet | hosts-file entries until Pi-hole (Phase 2) |
 | Switch firmware end-of-life | Admin access limited to the home network |
 | Internal root CA trusted by the admin PC (key compromise could impersonate any site) | Key stays in the cluster (cert-manager namespace); trusted for the current Windows user only; removable in certmgr.msc; name constraints considered later |
