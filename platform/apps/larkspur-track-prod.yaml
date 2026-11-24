@@ -1,0 +1,30 @@
+# Larkspur Track in larkspur-prod, rendered from the Helm chart in this repository.
+# The namespace, guardrails and database come from platform-config.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: larkspur-track-prod
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ChefBoyRJeff/larkspur-edge-platform.git
+    targetRevision: main
+    path: charts/larkspur-track
+    helm:
+      releaseName: larkspur-track
+      valueFiles:
+        - values-prod.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: larkspur-prod
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 2m
