@@ -1,0 +1,40 @@
+[project]
+name = "larkspur-track"
+version = "0.1.0"
+description = "Offline-first warehouse shipment tracking for the (fictional) Larkspur Logistics."
+authors = [
+    { name = "Jeff Jones", email = "156028335+ChefBoyRJeff@users.noreply.github.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "fastapi>=0.165.0",
+    "jinja2>=3.1.6",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[project.scripts]
+larkspur-track = "larkspur_track:main"
+
+[build-system]
+requires = ["uv_build>=0.13.0,<0.14.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.2.0",
+    "ruff>=0.17.6",
+]
