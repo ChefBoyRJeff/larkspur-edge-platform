@@ -1,0 +1,9 @@
+# Argo CD Helm values (chart argo/argo-cd 10.19.0, Argo CD v3.6.2)
+# Bootstrapped once with Helm; afterwards Argo CD manages itself from this file.
+dex:
+  enabled: false        # SSO is out of scope for v1
+notifications:
+  enabled: false        # no chat/email notifications yet
+configs:
+  params:
+    server.insecure: false
