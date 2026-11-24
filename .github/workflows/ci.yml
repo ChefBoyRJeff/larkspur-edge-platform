@@ -1,4 +1,4 @@
-# Pull request checks for Larkspur Track: format, lint and tests against PostgreSQL 18.
+# Pull request checks: app format, lint and tests against PostgreSQL 18; Helm chart lint and render.
 # Third-party actions are pinned to full commit SHAs (version in the comment); see ADR-0003.
 name: CI
 
@@ -53,3 +53,29 @@ jobs:
         run: uv run ruff check .
       - name: Tests
         run: uv run pytest -q --durations=5
+
+  chart-checks:
+    name: chart-checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Same Helm version Argo CD v3.6.2 uses to render the chart in the cluster.
+      - name: Install Helm
+        uses: azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e # v5.1.0
+        with:
+          version: v4.3.2
+          checksum-policy: required
+      - name: Lint the chart
+        run: helm lint --strict charts/larkspur-track -f charts/larkspur-track/values-dev.yaml
+      - name: Render the dev manifests
+        run: >-
+          helm template larkspur-track charts/larkspur-track --namespace larkspur-dev
+          -f charts/larkspur-track/values-dev.yaml
+      - name: Rendering without an image tag must fail
+        run: |
+          if helm template larkspur-track charts/larkspur-track --set host=track.example.com; then
+            echo "::error::the chart rendered without image.tag"
+            exit 1
+          fi
