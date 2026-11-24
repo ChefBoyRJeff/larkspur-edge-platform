@@ -1,0 +1,30 @@
+# Dev database: one PostgreSQL 18 instance managed by CloudNativePG.
+# The prod database, backups and restore come in the Data module.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: larkspur-db
+  namespace: larkspur-dev
+  annotations:
+    # The CRD comes from the cloudnative-pg app. On a fresh cluster it may not exist yet;
+    # platform-config retries the sync until it does.
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  instances: 1
+  # Pinned to the operator 1.30.2 default so operator upgrades never change PostgreSQL silently.
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.7-system-trixie
+  # With one instance, a PodDisruptionBudget would block node drains (patch-nodes runbook).
+  enablePDB: false
+  bootstrap:
+    initdb:
+      database: larkspur
+      owner: larkspur
+  storage:
+    storageClass: local-path
+    size: 2Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
