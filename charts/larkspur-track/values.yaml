@@ -7,6 +7,10 @@ image:
 
 replicaCount: 2
 
+# Seconds a stopping web pod keeps serving, so Traefik removes it from its routes before
+# uvicorn exits. Must stay below terminationGracePeriodSeconds (30).
+shutdownDelaySeconds: 5
+
 # Required: the HTTPS hostname, e.g. track.larkspur.home.arpa.
 host: ""
 # cert-manager ClusterIssuer for the TLS certificate (Larkspur internal CA).
