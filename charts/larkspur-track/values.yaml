@@ -1,0 +1,33 @@
+# Defaults shared by every environment; values-<env>.yaml sets the image tag and host.
+image:
+  repository: ghcr.io/chefboyrjeff/larkspur-track
+  # Required: an immutable sha-<commit> tag published by the Image workflow.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+
+# Required: the HTTPS hostname, e.g. track.larkspur.home.arpa.
+host: ""
+# cert-manager ClusterIssuer for the TLS certificate (Larkspur internal CA).
+tlsIssuer: larkspur-ca
+
+database:
+  # CloudNativePG creates <cluster>-app with a "uri" key; the app reads it as DATABASE_URL.
+  clusterName: larkspur-db
+  secretName: larkspur-db-app
+  secretKey: uri
+
+displayTimezone: America/New_York
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 256Mi
+
+migration:
+  # Seconds before a stuck migration is stopped; the sync then fails and nothing is rolled out.
+  activeDeadlineSeconds: 300
+  backoffLimit: 2

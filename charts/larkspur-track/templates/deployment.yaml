@@ -1,0 +1,79 @@
+# Web pods. Wave 1: after the network policies (wave -1) and the migration job (wave 0).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: larkspur-track
+  labels:
+    {{- include "larkspur-track.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  replicas: {{ .Values.replicaCount }}
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # Start a new pod and wait for it to be ready before stopping an old one.
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "larkspur-track.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: web
+  template:
+    metadata:
+      labels:
+        {{- include "larkspur-track.labels" . | nindent 8 }}
+        app.kubernetes.io/component: web
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "larkspur-track.podSecurityContext" . | nindent 8 }}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              {{- include "larkspur-track.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: web
+      containers:
+        - name: web
+          image: {{ include "larkspur-track.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            {{- include "larkspur-track.databaseEnv" . | nindent 12 }}
+            - name: DISPLAY_TIMEZONE
+              value: {{ .Values.displayTimezone | quote }}
+          ports:
+            - name: http
+              containerPort: 8000
+          # Ready only when PostgreSQL answers (/readyz gives up after the 3 s connect timeout).
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # Alive as long as the process serves HTTP; a database outage never restarts pods.
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- include "larkspur-track.resources" .Values.resources | nindent 12 }}
+          securityContext:
+            {{- include "larkspur-track.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            # The root filesystem is read-only; form uploads spool to /tmp.
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 16Mi
