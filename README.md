@@ -60,6 +60,7 @@ Both app namespaces enforce the `restricted` Pod Security profile, deny all netw
 | Path | Contents |
 |---|---|
 | ansible/ | Node configuration: inventory, roles (common, k3s_server, k3s_agent), site.yml (configure), patch.yml (rolling OS updates) |
+| app/ | Larkspur Track (FastAPI, Jinja2, PostgreSQL): uv project, source in src/larkspur_track/, tests in tests/ |
 | platform/ | GitOps manifests: bootstrap/ (root app), apps/ (Argo CD Applications), argocd/ (Argo CD Helm values), config/ (CA issuers, app namespaces and guardrails, HTTPS test page) |
 | docs/ | Plan, architecture decision records, runbooks, AI-use log |
 
