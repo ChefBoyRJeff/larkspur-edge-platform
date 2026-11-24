@@ -1,0 +1,70 @@
+# Database pods (and CloudNativePG's initdb job) carry cnpg.io/cluster: larkspur-db.
+# default-deny-all blocks everything else.
+---
+# The operator checks instance status on 8000 and manages PostgreSQL on 5432.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-cnpg-operator-to-larkspur-db
+  namespace: larkspur-dev
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: larkspur-db
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cnpg-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: cloudnative-pg
+      ports:
+        - protocol: TCP
+          port: 8000
+        - protocol: TCP
+          port: 5432
+---
+# Only Larkspur Track pods (app and migration job) may connect to PostgreSQL.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-larkspur-track-to-larkspur-db
+  namespace: larkspur-dev
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: larkspur-db
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: larkspur-track
+      ports:
+        - protocol: TCP
+          port: 5432
+---
+# The instance manager reports status to the Kubernetes API. kube-router matches the
+# translated endpoint (control-plane node, port 6443), which also covers 10.43.0.1:443.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-larkspur-db-to-kube-api
+  namespace: larkspur-dev
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: larkspur-db
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 192.168.1.199/32
+      ports:
+        - protocol: TCP
+          port: 6443

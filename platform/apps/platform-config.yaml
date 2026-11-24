@@ -18,3 +18,11 @@ spec:
     automated:
       prune: true
       selfHeal: true
+    # Resources whose CRDs come from other apps (cert-manager, CloudNativePG) fail until
+    # those CRDs exist, e.g. on a rebuilt cluster. Retry instead of waiting for a new commit.
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
