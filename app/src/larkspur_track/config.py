@@ -12,6 +12,7 @@ class Settings(BaseSettings):
 
     database_url: str
     test_database_url: str | None = None
+    display_timezone: str = "America/New_York"
 
 
 @lru_cache

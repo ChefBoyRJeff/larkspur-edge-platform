@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Receive a shipment · Larkspur Track{% endblock %}
+{% block content %}
+<p><a href="/shipments">&larr; All shipments</a></p>
+<h1>Receive a shipment</h1>
+<form class="stack" method="post" action="/shipments">
+  <label for="tracking_number">Tracking number</label>
+  <input id="tracking_number" name="tracking_number" value="{{ values.tracking_number }}" required maxlength="40">
+  {% if errors.tracking_number %}<p class="error">{{ errors.tracking_number }}</p>{% endif %}
+
+  <label for="consignee">Consignee</label>
+  <input id="consignee" name="consignee" value="{{ values.consignee }}" required maxlength="120">
+  {% if errors.consignee %}<p class="error">{{ errors.consignee }}</p>{% endif %}
+
+  <label for="destination">Destination</label>
+  <input id="destination" name="destination" value="{{ values.destination }}" required maxlength="200">
+  {% if errors.destination %}<p class="error">{{ errors.destination }}</p>{% endif %}
+
+  <label for="note">Note (optional)</label>
+  <textarea id="note" name="note" maxlength="500">{{ values.note }}</textarea>
+  {% if errors.note %}<p class="error">{{ errors.note }}</p>{% endif %}
+
+  <button type="submit">Save</button>
+</form>
+{% endblock %}

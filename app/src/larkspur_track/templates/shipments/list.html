@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Shipments · Larkspur Track{% endblock %}
+{% block content %}
+<h1>Shipments</h1>
+<p><a class="button" href="/shipments/new">Receive a shipment</a></p>
+{% if shipments %}
+<table>
+  <thead><tr><th>Tracking number</th><th>Consignee</th><th>Destination</th><th>Status</th><th>Received</th></tr></thead>
+  <tbody>
+  {% for shipment in shipments %}
+    <tr>
+      <td><a href="/shipments/{{ shipment.id }}">{{ shipment.tracking_number }}</a></td>
+      <td>{{ shipment.consignee }}</td>
+      <td>{{ shipment.destination }}</td>
+      <td><span class="status">{{ shipment.status }}</span></td>
+      <td>{{ shipment.created_at | local_time }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No shipments yet.</p>
+{% endif %}
+{% endblock %}
