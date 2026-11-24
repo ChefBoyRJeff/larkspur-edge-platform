@@ -1,0 +1,23 @@
+# App namespaces. Pod Security Admission enforces the "restricted" profile.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: larkspur-dev
+  labels:
+    environment: dev
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+# App namespaces. Pod Security Admission enforces the "restricted" profile.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: larkspur-prod
+  labels:
+    environment: prod
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted

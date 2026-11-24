@@ -1,0 +1,29 @@
+# Group larkspur-developers: edit access in larkspur-dev only.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: larkspur-developers-edit
+  namespace: larkspur-dev
+subjects:
+  - kind: Group
+    name: larkspur-developers
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: edit
+  apiGroup: rbac.authorization.k8s.io
+---
+# Group larkspur-developers: view access in larkspur-prod only.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: larkspur-developers-view
+  namespace: larkspur-prod
+subjects:
+  - kind: Group
+    name: larkspur-developers
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: view
+  apiGroup: rbac.authorization.k8s.io
