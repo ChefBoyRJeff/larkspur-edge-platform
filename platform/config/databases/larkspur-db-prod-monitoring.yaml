@@ -76,3 +76,31 @@ spec:
             summary: Metric collection for the larkspur-prod database is failing
             description: CloudNativePG could not query PostgreSQL for metrics for 10 minutes.
             runbook: docs/runbooks/alerts.md#larkspurdatabasemetricsfailing
+        - alert: LarkspurWalArchivingFailing
+          # A WAL file failed to reach Azure in the last 10 minutes and none has succeeded since:
+          # changes since then would be lost with the node (RPO target: 5 minutes).
+          expr: |
+            max(cnpg_pg_stat_archiver_seconds_since_last_failure{namespace="larkspur-prod"}) < 600
+              unless max(cnpg_pg_stat_archiver_seconds_since_last_archival{namespace="larkspur-prod"})
+                < max(cnpg_pg_stat_archiver_seconds_since_last_failure{namespace="larkspur-prod"})
+          for: 10m
+          labels:
+            severity: critical
+            namespace: larkspur-prod
+          annotations:
+            summary: The larkspur-prod database cannot archive WAL to Azure
+            description: WAL archiving to Azure Blob Storage has been failing for 10 minutes.
+            runbook: docs/runbooks/alerts.md#larkspurwalarchivingfailing
+        - alert: LarkspurBackupTooOld
+          # Nightly base backups: more than 26 hours means last night's failed (or none exists).
+          expr: |
+            time() - max(barman_cloud_cloudnative_pg_io_last_available_backup_timestamp{namespace="larkspur-prod"}) > 93600
+              or absent(barman_cloud_cloudnative_pg_io_last_available_backup_timestamp{namespace="larkspur-prod"})
+          for: 30m
+          labels:
+            severity: warning
+            namespace: larkspur-prod
+          annotations:
+            summary: The larkspur-prod database has no recent base backup
+            description: The newest base backup in Azure is more than 26 hours old, or there is none.
+            runbook: docs/runbooks/alerts.md#larkspurbackuptooold

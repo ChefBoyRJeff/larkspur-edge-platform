@@ -92,3 +92,30 @@ spec:
       ports:
         - protocol: TCP
           port: 9187
+---
+# Backups go to Azure Blob Storage over HTTPS. Azure's addresses change, so this allows any public
+# address on 443 and nothing private (the cluster, the home network). DNS is allowed namespace-wide.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-larkspur-db-to-azure-blob
+  namespace: larkspur-prod
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: larkspur-db
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 100.64.0.0/10
+              - 169.254.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
