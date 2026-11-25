@@ -4,7 +4,7 @@
 
 **Larkspur Track**: an offline-first shipment tracking system for a (fictional) Larkspur Logistics regional warehouse, running on a 2-node **k3s** Kubernetes cluster of Raspberry Pi 5s, built and operated with production practices: Ansible, GitHub Actions, Argo CD (GitOps), cert-manager, Sealed Secrets, CloudNativePG, Prometheus/Grafana, and Azure for off-site backups and sync.
 
-> **Status:** Foundation, Infrastructure, Platform, CI/CD, Application and Operations (monitoring) done; Data (backups) next. See [docs/plan.md](docs/plan.md).
+> **Status:** Foundation, Infrastructure, Platform, CI/CD, Application, Operations (monitoring) and Data (backups) done; Integration (offline-first sync) next. See [docs/plan.md](docs/plan.md).
 
 | Host | Hardware | Role |
 |---|---|---|
@@ -23,6 +23,7 @@ flowchart LR
   end
 
   gh[("GitHub<br/>larkspur-edge-platform")]
+  blob[("Azure Blob Storage<br/>rg-lark-edge-backup")]
   actions["GitHub Actions<br/>tests, chart checks,<br/>amd64 + arm64 images, Trivy"]
   ghcr[("GHCR<br/>larkspur-track:sha-commit")]
 
@@ -64,6 +65,8 @@ flowchart LR
   ghcr -->|"image pull"| prodapp
   cnpg -.->|"runs"| devdb
   cnpg -.->|"runs"| proddb
+  devdb -->|"WAL + nightly backups"| blob
+  proddb -->|"WAL + nightly backups"| blob
   devapp --> devdb
   prodapp --> proddb
   wsl -->|"SSH: site.yml, patch.yml"| n1
@@ -95,6 +98,9 @@ Releases are pull requests that change the image tag; rollbacks are reverts. See
 
 Both environments require sign-in, with clerk, supervisor and admin roles and an append-only audit log (ADR-0006). Users are managed on the Users page; see [docs/runbooks/user-administration.md](docs/runbooks/user-administration.md).
 
+## Backups
+Each database archives every change (WAL) to its own private container in Azure Blob Storage and takes a full backup every night, kept 30 days, through CloudNativePG's Barman Cloud plugin. Targets: lose at most 5 minutes of data (RPO) and be back within 30 minutes (RTO); measured in a restore drill: changes reached Azure within 2-5 seconds and a database was rebuilt from Azure in 71-81 seconds. Design: [ADR-0008](docs/adr/0008-database-backups.md); procedures and the drill: [docs/runbooks/backups.md](docs/runbooks/backups.md). The Azure side is Bicep in `azure/backup/`.
+
 ## Monitoring
 Prometheus scrapes the app, both databases, cert-manager, the nodes and Kubernetes itself; the blackbox exporter checks each page over trusted HTTPS from inside the cluster. Alertmanager emails warning and critical alerts, each linking to its section in [docs/runbooks/alerts.md](docs/runbooks/alerts.md). Design: [ADR-0007](docs/adr/0007-monitoring-and-alerting.md).
 
@@ -110,8 +116,9 @@ Dashboards: https://grafana.larkspur.home.arpa (**Larkspur Track** shows the SLO
 |---|---|
 | ansible/ | Node configuration: inventory, roles (common, k3s_server, k3s_agent), site.yml (configure), patch.yml (rolling OS updates) |
 | app/ | Larkspur Track (FastAPI, Jinja2, PostgreSQL): uv project, source in src/larkspur_track/, tests in tests/ |
-| platform/ | GitOps manifests: bootstrap/ (root app), apps/ (Argo CD Applications), argocd/ (Argo CD Helm values), alertmanager/ (alert email template and sealing script), config/ (CA issuers, app namespaces and guardrails, databases and their monitoring, Traefik settings, monitoring rules and dashboards, HTTPS test page) |
+| platform/ | GitOps manifests: bootstrap/ (root app), apps/ (Argo CD Applications), drills/ (restore drill, not synced), argocd/ (Argo CD Helm values), alertmanager/ (alert email template and sealing script), config/ (CA issuers, app namespaces and guardrails, databases and their monitoring, Traefik settings, monitoring rules and dashboards, HTTPS test page) |
 | charts/ | Helm chart for Larkspur Track (web Deployment, migration job, Service, Ingress, Certificate, network policies, ServiceMonitor, alert rules) with per-environment values |
+| azure/ | Bicep and scripts for the Azure side: backup storage, budget, per-environment backup credentials |
 | docs/ | Plan, architecture decision records, runbooks, AI-use log |
 | .github/ | CI: pull request checks, multi-arch image builds to GHCR (amd64 + arm64), Dependabot |
 
