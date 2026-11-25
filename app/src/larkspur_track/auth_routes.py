@@ -24,6 +24,7 @@ from larkspur_track.auth import (
     session_cookie_name,
     set_session_cookie,
 )
+from larkspur_track.metrics import SIGN_INS
 from larkspur_track.sessions import end_session, start_session
 from larkspur_track.templating import render
 from larkspur_track.users import find_user, is_locked, normalize_username
@@ -73,6 +74,7 @@ def sign_in(
             client_ip=client_address(request),
         )
         session.commit()  # keep the failed-attempt count, any lockout and the audit entry
+        SIGN_INS.labels("failure").inc()
         context = {"next": target, "username": username.strip(), "error": SIGN_IN_FAILED}
         return render(request, "sign_in.html", context, 422)
     # A new token at every sign-in, so a token planted before sign-in is never reused.
@@ -88,6 +90,7 @@ def sign_in(
         client_ip=client_address(request),
     )
     session.commit()
+    SIGN_INS.labels("success").inc()
     response = RedirectResponse(target, status_code=303)
     set_session_cookie(response, token)
     return response

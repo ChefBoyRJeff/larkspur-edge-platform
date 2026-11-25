@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     # Browsers keep Secure cookies only from HTTPS sites. Local development over
     # http://127.0.0.1 sets SESSION_COOKIE_SECURE=false in app/.env (see scripts/setup-dev-db.sh).
     session_cookie_secure: bool = True
+    # Port for Prometheus metrics; 0 turns the metrics server off (the default for local runs).
+    metrics_port: int = 0
 
     @field_validator("database_url", "test_database_url")
     @classmethod
