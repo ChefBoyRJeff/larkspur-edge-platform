@@ -68,6 +68,8 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
+          # Same value in both builds of a run, so the pushed image is the one tested.
+          build-args: APT_REFRESH=${{ github.run_id }}
 
       - name: Smoke test (non-root, read-only filesystem, /healthz)
         run: |
@@ -110,6 +112,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=${{ matrix.arch }}
+          build-args: APT_REFRESH=${{ github.run_id }}
 
       - name: Save the digest
         if: env.PUBLISH == 'true'
