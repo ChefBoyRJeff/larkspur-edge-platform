@@ -31,6 +31,9 @@ spec:
       terminationGracePeriodSeconds: 30
       securityContext:
         {{- include "larkspur-track.podSecurityContext" . | nindent 8 }}
+      # Prefer one web pod per node. ScheduleAnyway, so a dead node never blocks scheduling.
+      # matchLabelKeys counts only pods of the same release (ReplicaSet); without it, old pods
+      # still shutting down during a rollout skew the count and both new pods can land together.
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
@@ -39,6 +42,8 @@ spec:
             matchLabels:
               {{- include "larkspur-track.selectorLabels" . | nindent 14 }}
               app.kubernetes.io/component: web
+          matchLabelKeys:
+            - pod-template-hash
       containers:
         - name: web
           image: {{ include "larkspur-track.image" . }}
