@@ -1,5 +1,6 @@
 # Wave -1: in place before the migration job (wave 0) and the web pods (wave 1) start.
-# Traefik is the only way in; PostgreSQL (and DNS, namespace-wide) is the only way out.
+# Traefik is the only way in to the web port and Prometheus the only way in to the metrics
+# port; PostgreSQL (and DNS, namespace-wide) is the only way out.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -49,3 +50,30 @@ spec:
       ports:
         - protocol: TCP
           port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prometheus-to-larkspur-track-metrics
+  labels:
+    {{- include "larkspur-track.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "larkspur-track.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: web
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: {{ .Values.metrics.port }}

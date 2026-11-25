@@ -24,6 +24,15 @@ database:
 
 displayTimezone: America/New_York
 
+metrics:
+  # Prometheus metrics port; only Prometheus in the monitoring namespace may reach it
+  # (networkpolicy.yaml). The Ingress routes only the http port, so it is never exposed.
+  port: 9102
+  serviceMonitor:
+    # Needs the ServiceMonitor CRD from kube-prometheus-stack.
+    enabled: true
+    interval: 30s
+
 resources:
   requests:
     cpu: 50m
