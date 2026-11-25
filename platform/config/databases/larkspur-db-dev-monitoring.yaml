@@ -1,0 +1,78 @@
+# Monitoring for the dev database. The PodMonitor and PrometheusRule CRDs come from
+# kube-prometheus-stack; platform-config retries the sync until they exist.
+---
+# CloudNativePG publishes PostgreSQL metrics on each instance's "metrics" port (9187).
+# Created here rather than by the operator: the Cluster's enablePodMonitor is deprecated.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: larkspur-db
+  namespace: larkspur-dev
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  selector:
+    matchLabels:
+      cnpg.io/cluster: larkspur-db
+      cnpg.io/podRole: instance
+  podMetricsEndpoints:
+    - port: metrics
+      interval: 30s
+---
+# Alerts for the dev database. What to do for each: docs/runbooks/alerts.md.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: larkspur-db
+  namespace: larkspur-dev
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  groups:
+    - name: larkspur-db
+      rules:
+        - alert: LarkspurDatabaseDown
+          # No instance reports PostgreSQL up (pod gone, PostgreSQL stopped, or metrics unreachable).
+          expr: absent(cnpg_collector_up{namespace="larkspur-dev"} == 1)
+          for: 2m
+          labels:
+            severity: critical
+            namespace: larkspur-dev
+          annotations:
+            summary: The larkspur-dev database is down
+            description: PostgreSQL has not reported up for 2 minutes.
+            runbook: docs/runbooks/alerts.md#larkspurdatabasedown
+        - alert: LarkspurDatabaseNearConnectionLimit
+          expr: |
+            sum(cnpg_backends_total{namespace="larkspur-dev"})
+              / max(cnpg_pg_settings_setting{namespace="larkspur-dev", name="max_connections"}) > 0.8
+          for: 5m
+          labels:
+            severity: warning
+            namespace: larkspur-dev
+          annotations:
+            summary: The larkspur-dev database is near its connection limit
+            description: Over 80% of max_connections have been in use for 5 minutes.
+            runbook: docs/runbooks/alerts.md#larkspurdatabasenearconnectionlimit
+        - alert: LarkspurDatabaseLarge
+          # 75% of the 2 GiB planned for the volume. local-path does not enforce the size, so
+          # the database could keep growing until the node's disk is full.
+          expr: max(cnpg_pg_database_size_bytes{namespace="larkspur-dev", datname="larkspur"}) > 1610612736
+          for: 15m
+          labels:
+            severity: warning
+            namespace: larkspur-dev
+          annotations:
+            summary: The larkspur-dev database is larger than planned
+            description: The larkspur database is over 1.5 GiB (75% of the 2 GiB planned).
+            runbook: docs/runbooks/alerts.md#larkspurdatabaselarge
+        - alert: LarkspurDatabaseMetricsFailing
+          expr: max(cnpg_collector_last_collection_error{namespace="larkspur-dev"}) == 1
+          for: 10m
+          labels:
+            severity: warning
+            namespace: larkspur-dev
+          annotations:
+            summary: Metric collection for the larkspur-dev database is failing
+            description: CloudNativePG could not query PostgreSQL for metrics for 10 minutes.
+            runbook: docs/runbooks/alerts.md#larkspurdatabasemetricsfailing

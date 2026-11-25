@@ -1,0 +1,57 @@
+# Alerts for cert-manager and the certificates it manages. Certificates last 90 days and
+# renew 15 days before expiry, so a renewal problem shows up about two weeks ahead.
+# What to do for each: docs/runbooks/alerts.md.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cert-manager
+  namespace: monitoring
+  annotations:
+    # The CRD comes from kube-prometheus-stack; platform-config retries the sync until it exists.
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  groups:
+    - name: cert-manager
+      rules:
+        - alert: CertManagerDown
+          # Nothing would renew certificates.
+          expr: absent(up{job="cert-manager", namespace="cert-manager"} == 1)
+          for: 10m
+          labels:
+            severity: critical
+            namespace: cert-manager
+          annotations:
+            summary: cert-manager is down
+            description: Prometheus has not reached the cert-manager controller for 10 minutes.
+            runbook: docs/runbooks/alerts.md#certmanagerdown
+        - alert: CertificateNotReady
+          expr: max by (namespace, name) (certmanager_certificate_ready_status{condition="False"}) == 1
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: Certificate {{ $labels.namespace }}/{{ $labels.name }} is not ready
+            description: The certificate has been in a failed state for 15 minutes.
+            runbook: docs/runbooks/alerts.md#certificatenotready
+        - alert: CertificateRenewalOverdue
+          # The renewal time passed over an hour ago and the certificate has not been renewed.
+          expr: |
+            time() - (max by (namespace, name) (certmanager_certificate_renewal_timestamp_seconds) > 0) > 3600
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: Certificate {{ $labels.namespace }}/{{ $labels.name }} did not renew on time
+            description: Its renewal time passed more than an hour ago; it still has days before it expires.
+            runbook: docs/runbooks/alerts.md#certificaterenewaloverdue
+        - alert: CertificateExpiringSoon
+          # Renewal has been failing for over a week.
+          expr: |
+            (max by (namespace, name) (certmanager_certificate_expiration_timestamp_seconds) > 0) - time() < 7 * 86400
+          for: 1h
+          labels:
+            severity: critical
+          annotations:
+            summary: Certificate {{ $labels.namespace }}/{{ $labels.name }} expires within 7 days
+            description: Browsers will reject it when it expires.
+            runbook: docs/runbooks/alerts.md#certificateexpiringsoon
