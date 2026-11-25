@@ -4,6 +4,7 @@
 # Real requests exclude the /healthz and /readyz health checks. Dev is recorded for the
 # dashboard but has no SLO. Alerts fire on how fast the budget is being used (burn rate),
 # with a long and a short window that must both agree. What to do: docs/runbooks/alerts.md.
+# Error ratios use "or 0 * total" so an environment with traffic but no 5xx records 0, not nothing.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -18,17 +19,17 @@ spec:
       interval: 30s
       rules:
         - record: larkspur:slo_errors:ratio_rate5m
-          expr: sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz", status=~"5.."}[5m])) / sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz"}[5m]))
+          expr: (sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz", status=~"5.."}[5m])) or 0 * sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz"}[5m]))) / sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz"}[5m]))
         - record: larkspur:slo_errors:ratio_rate30m
-          expr: sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz", status=~"5.."}[30m])) / sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz"}[30m]))
+          expr: (sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz", status=~"5.."}[30m])) or 0 * sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz"}[30m]))) / sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz"}[30m]))
         - record: larkspur:slo_errors:ratio_rate1h
-          expr: sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz", status=~"5.."}[1h])) / sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz"}[1h]))
+          expr: (sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz", status=~"5.."}[1h])) or 0 * sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz"}[1h]))) / sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz"}[1h]))
         - record: larkspur:slo_errors:ratio_rate2h
-          expr: sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz", status=~"5.."}[2h])) / sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz"}[2h]))
+          expr: (sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz", status=~"5.."}[2h])) or 0 * sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz"}[2h]))) / sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz"}[2h]))
         - record: larkspur:slo_errors:ratio_rate6h
-          expr: sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz", status=~"5.."}[6h])) / sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz"}[6h]))
+          expr: (sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz", status=~"5.."}[6h])) or 0 * sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz"}[6h]))) / sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz"}[6h]))
         - record: larkspur:slo_errors:ratio_rate1d
-          expr: sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz", status=~"5.."}[1d])) / sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz"}[1d]))
+          expr: (sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz", status=~"5.."}[1d])) or 0 * sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz"}[1d]))) / sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz"}[1d]))
         - record: larkspur:slo_slow:ratio_rate5m
           expr: 1 - sum by (namespace) (rate(larkspur_http_request_duration_seconds_bucket{route!~"/healthz|/readyz", le="1.0"}[5m])) / sum by (namespace) (rate(larkspur_http_request_duration_seconds_count{route!~"/healthz|/readyz"}[5m]))
         - record: larkspur:slo_slow:ratio_rate30m
@@ -52,7 +53,7 @@ spec:
       interval: 5m
       rules:
         - record: larkspur:slo_errors:ratio_rate7d
-          expr: sum by (namespace) (increase(larkspur_http_requests_total{route!~"/healthz|/readyz", status=~"5.."}[7d])) / sum by (namespace) (increase(larkspur_http_requests_total{route!~"/healthz|/readyz"}[7d]))
+          expr: (sum by (namespace) (increase(larkspur_http_requests_total{route!~"/healthz|/readyz", status=~"5.."}[7d])) or 0 * sum by (namespace) (increase(larkspur_http_requests_total{route!~"/healthz|/readyz"}[7d]))) / sum by (namespace) (increase(larkspur_http_requests_total{route!~"/healthz|/readyz"}[7d]))
         - record: larkspur:slo_slow:ratio_rate7d
           expr: 1 - sum by (namespace) (increase(larkspur_http_request_duration_seconds_bucket{route!~"/healthz|/readyz", le="1.0"}[7d])) / sum by (namespace) (increase(larkspur_http_request_duration_seconds_count{route!~"/healthz|/readyz"}[7d]))
         - record: larkspur:slo_availability:target
