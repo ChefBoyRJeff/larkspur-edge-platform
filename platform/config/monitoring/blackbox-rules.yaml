@@ -1,0 +1,54 @@
+# Alerts from the blackbox exporter's page checks (platform/apps/blackbox-exporter.yaml).
+# What to do for each: docs/runbooks/alerts.md.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: blackbox
+  namespace: monitoring
+  annotations:
+    # The CRD comes from kube-prometheus-stack; platform-config retries the sync until it exists.
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  groups:
+    - name: blackbox
+      rules:
+        - alert: LarkspurEndpointDown
+          # Prod is what staff use: critical.
+          expr: max by (target, namespace, instance) (probe_success{target="track-prod"}) == 0
+          for: 3m
+          labels:
+            severity: critical
+          annotations:
+            summary: "{{ $labels.target }} fails from the user's side"
+            description: "{{ $labels.instance }} has not answered 200 over trusted HTTPS for 3 minutes."
+            runbook: docs/runbooks/alerts.md#larkspurendpointdown
+        - alert: LarkspurEndpointDown
+          expr: max by (target, namespace, instance) (probe_success{target!="track-prod"}) == 0
+          for: 3m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.target }} fails from the user's side"
+            description: "{{ $labels.instance }} has not answered 200 over trusted HTTPS for 3 minutes."
+            runbook: docs/runbooks/alerts.md#larkspurendpointdown
+        - alert: LarkspurEndpointSlow
+          expr: max by (target, namespace, instance) (probe_duration_seconds) > 2
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.target }} is slow from the user's side"
+            description: "{{ $labels.instance }} has taken over 2 seconds to answer for 15 minutes."
+            runbook: docs/runbooks/alerts.md#larkspurendpointslow
+        - alert: BlackboxProbesMissing
+          # Without results, LarkspurEndpointDown cannot fire. 3 = the targets in
+          # platform/apps/blackbox-exporter.yaml; update it when adding one.
+          expr: (count(probe_success) or vector(0)) < 3
+          for: 5m
+          labels:
+            severity: warning
+            namespace: monitoring
+          annotations:
+            summary: Page checks are not reporting
+            description: Fewer than 3 page checks have reported results for 5 minutes; the blackbox exporter may be down.
+            runbook: docs/runbooks/alerts.md#blackboxprobesmissing
