@@ -1,0 +1,115 @@
+# Prometheus, Alertmanager, Grafana, node-exporter and kube-state-metrics (see ADR-0007).
+# The namespace and its Grafana certificate and admin secret live in platform/config.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: 93.10.1
+    helm:
+      valuesObject:
+        # k3s runs the scheduler, controller manager and proxy inside the k3s process, listening
+        # on localhost only, and stores cluster state in SQLite rather than etcd. Their scrape
+        # targets and alert rules would always report them as down.
+        kubeEtcd:
+          enabled: false
+        kubeControllerManager:
+          enabled: false
+        kubeScheduler:
+          enabled: false
+        kubeProxy:
+          enabled: false
+        prometheusOperator:
+          admissionWebhooks:
+            # cert-manager issues the webhook certificate, instead of Helm hook jobs.
+            certManager:
+              enabled: true
+          resources:
+            requests: { cpu: 20m, memory: 64Mi }
+            limits: { memory: 192Mi }
+        prometheus:
+          prometheusSpec:
+            # Find ServiceMonitors, PodMonitors, Probes and rules from every release, not only
+            # this chart's (the app chart adds its own ServiceMonitor).
+            serviceMonitorSelectorNilUsesHelmValues: false
+            podMonitorSelectorNilUsesHelmValues: false
+            probeSelectorNilUsesHelmValues: false
+            ruleSelectorNilUsesHelmValues: false
+            scrapeConfigSelectorNilUsesHelmValues: false
+            # Short retention and a size cap limit writes to the SD cards.
+            retention: 7d
+            retentionSize: 2GB
+            storageSpec:
+              volumeClaimTemplate:
+                spec:
+                  storageClassName: local-path
+                  accessModes: ["ReadWriteOnce"]
+                  resources:
+                    requests:
+                      storage: 3Gi
+            resources:
+              requests: { cpu: 100m, memory: 512Mi }
+              limits: { memory: 1536Mi }
+        alertmanager:
+          alertmanagerSpec:
+            resources:
+              requests: { cpu: 10m, memory: 32Mi }
+              limits: { memory: 128Mi }
+        grafana:
+          admin:
+            existingSecret: grafana-admin
+          ingress:
+            enabled: true
+            ingressClassName: traefik
+            annotations:
+              traefik.ingress.kubernetes.io/router.entrypoints: websecure
+            hosts:
+              - grafana.larkspur.home.arpa
+            tls:
+              - secretName: grafana-tls
+                hosts:
+                  - grafana.larkspur.home.arpa
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { memory: 384Mi }
+        kube-state-metrics:
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 128Mi }
+        prometheus-node-exporter:
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { memory: 64Mi }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  # cert-manager writes the webhook CA bundle after Argo CD applies the configuration.
+  ignoreDifferences:
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+      jqPathExpressions:
+        - .webhooks[]?.clientConfig.caBundle
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+      jqPathExpressions:
+        - .webhooks[]?.clientConfig.caBundle
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      # The chart's CRDs are too large for client-side apply.
+      - ServerSideApply=true
+      - RespectIgnoreDifferences=true
+    # The monitoring namespace comes from the platform-config app; retry until it exists.
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
