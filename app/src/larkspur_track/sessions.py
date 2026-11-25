@@ -7,6 +7,7 @@ minutes without a page view, whichever comes first.
 
 import hashlib
 import secrets
+import uuid
 from datetime import datetime, timedelta
 
 from sqlalchemy import delete, or_, select
@@ -68,3 +69,8 @@ def resume_session(session: Session, token: str, now: datetime) -> UserSession |
 
 def end_session(session: Session, token: str) -> None:
     session.execute(delete(UserSession).where(UserSession.token_hash == hash_token(token)))
+
+
+def end_user_sessions(session: Session, user_id: uuid.UUID) -> None:
+    """Sign a user out everywhere, e.g. after deactivation or a password reset."""
+    session.execute(delete(UserSession).where(UserSession.user_id == user_id))

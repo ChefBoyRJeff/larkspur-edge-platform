@@ -10,15 +10,17 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from larkspur_track.config import get_settings
+from larkspur_track.roles import UserRole, has_role
 
 
 def _page_context(request: Request) -> dict[str, Any]:
-    """The running release, who is signed in, and the CSRF token their forms must send."""
+    """The running release, who is signed in, their role, and the CSRF token forms must send."""
     auth = getattr(request.state, "auth", None)
     return {
         "app_release": get_settings().app_release,
         "current_user": auth,
         "csrf_token": auth.csrf_token if auth else "",
+        "is_admin": auth is not None and has_role(auth.role, UserRole.ADMIN),
     }
 
 

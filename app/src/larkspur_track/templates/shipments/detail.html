@@ -5,7 +5,9 @@
 <h1>{{ shipment.tracking_number }} <span class="status">{{ shipment.status }}</span></h1>
 <p><strong>Consignee:</strong> {{ shipment.consignee }}<br><strong>Destination:</strong> {{ shipment.destination }}</p>
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
-{% if next_status %}
+{% if next_status and not may_advance %}
+<p class="muted">A {{ role_needed }} marks this shipment as {{ next_status }}.</p>
+{% elif next_status %}
 <form class="stack" method="post" action="/shipments/{{ shipment.id }}/advance">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <input type="hidden" name="target" value="{{ next_status }}">

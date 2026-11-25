@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Users · Larkspur Track{% endblock %}
+{% block content %}
+<h1>Users</h1>
+{% if done %}<p class="done" role="status">{{ done }}</p>{% endif %}
+<p><a class="button" href="/admin/users/new">Add a user</a></p>
+<table>
+  <thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Status</th></tr></thead>
+  <tbody>
+  {% for user, locked in rows %}
+    <tr>
+      <td><a href="/admin/users/{{ user.id }}">{{ user.username }}</a></td>
+      <td>{{ user.display_name }}</td>
+      <td>{{ user.role }}</td>
+      <td>{% if not user.is_active %}deactivated{% elif locked %}locked{% else %}active{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

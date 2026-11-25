@@ -8,6 +8,7 @@ site cannot submit a form on a signed-in user's behalf.
 import hmac
 import secrets
 import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from functools import lru_cache
@@ -20,7 +21,7 @@ from larkspur_track.config import get_settings
 from larkspur_track.db import get_session
 from larkspur_track.models import User
 from larkspur_track.passwords import hash_password, needs_rehash, verify_password
-from larkspur_track.roles import UserRole
+from larkspur_track.roles import UserRole, has_role
 from larkspur_track.sessions import SESSION_LIFETIME, resume_session
 from larkspur_track.users import find_user
 
@@ -43,6 +44,14 @@ class SignInRequired(Exception):
 
 class CsrfRejected(Exception):
     """A change request without the page's token, or sent from another site."""
+
+
+class RoleRequired(Exception):
+    """The signed-in user's role is too low for this page or action."""
+
+    def __init__(self, required: UserRole) -> None:
+        super().__init__(f"needs the {required} role")
+        self.required = required
 
 
 @dataclass(frozen=True)
@@ -175,3 +184,17 @@ async def require_signed_in(request: Request, auth: CurrentAuth) -> SignedIn:
         ):
             raise CsrfRejected
     return auth
+
+
+def require_role(required: UserRole) -> Callable[[SignedIn], Awaitable[SignedIn]]:
+    """A dependency that allows the given role and every role above it."""
+
+    async def check(auth: Annotated[SignedIn, Depends(require_signed_in)]) -> SignedIn:
+        if not has_role(auth.role, required):
+            raise RoleRequired(required)
+        return auth
+
+    return check
+
+
+require_admin = require_role(UserRole.ADMIN)
