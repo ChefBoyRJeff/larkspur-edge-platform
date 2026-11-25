@@ -1,0 +1,17 @@
+# Customizes the Traefik that k3s installs (see docs/adr/0005-ingress-client-ip.md).
+# k3s merges these values over its bundled chart values; it does not replace them.
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    # One Traefik pod per node, so every node that receives traffic can serve it locally.
+    deployment:
+      kind: DaemonSet
+    service:
+      spec:
+        # Deliver traffic only to the Traefik pod on the node it arrived at, without SNAT,
+        # so Traefik sees the client's real address and passes it on in X-Forwarded-For.
+        externalTrafficPolicy: Local
