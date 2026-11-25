@@ -9,7 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from larkspur_track import admin_routes, audit_routes, auth_routes
-from larkspur_track.config import get_settings
+from larkspur_track.config import MetricsSettings
 from larkspur_track.db import get_engine
 from larkspur_track.metrics import MetricsMiddleware, start_metrics_server
 from larkspur_track.routes import router
@@ -18,7 +18,7 @@ from larkspur_track.routes import router
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Start the metrics server with the app (when METRICS_PORT is set) and stop it after."""
-    port = get_settings().metrics_port
+    port = MetricsSettings().metrics_port
     server = start_metrics_server(port, lambda: Session(get_engine())) if port else None
     try:
         yield

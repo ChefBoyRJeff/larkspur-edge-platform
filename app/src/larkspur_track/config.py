@@ -35,13 +35,21 @@ class Settings(BaseSettings):
     # Browsers keep Secure cookies only from HTTPS sites. Local development over
     # http://127.0.0.1 sets SESSION_COOKIE_SECURE=false in app/.env (see scripts/setup-dev-db.sh).
     session_cookie_secure: bool = True
-    # Port for Prometheus metrics; 0 turns the metrics server off (the default for local runs).
-    metrics_port: int = 0
 
     @field_validator("database_url", "test_database_url")
     @classmethod
     def _use_psycopg_driver(cls, value: str | None) -> str | None:
         return None if value is None else use_psycopg_driver(value)
+
+
+class MetricsSettings(BaseSettings):
+    """Read at startup, apart from Settings, so the app starts (and /healthz answers) even
+    without DATABASE_URL, as in the image smoke test."""
+
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    # Port for Prometheus metrics; 0 turns the metrics server off (the default for local runs).
+    metrics_port: int = 0
 
 
 @lru_cache

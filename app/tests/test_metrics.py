@@ -3,6 +3,7 @@
 import http.client
 from collections.abc import Iterator
 from contextlib import nullcontext
+from pathlib import Path
 from wsgiref.simple_server import WSGIServer
 
 import pytest
@@ -12,6 +13,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from conftest import PHRASE, MakeUser, SignedInClient
+from larkspur_track.main import create_app
 from larkspur_track.metrics import UNMATCHED, ShipmentCollector, start_metrics_server
 from larkspur_track.services import create_shipment
 from larkspur_track.workflow import ShipmentStatus
@@ -115,3 +117,15 @@ def test_metrics_server_serves_the_shipment_metric(
     body = connection.getresponse().read().decode()
 
     assert 'larkspur_shipments{status="received"} 1.0' in body
+
+
+def test_app_starts_without_database_settings(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, fresh_settings: None
+) -> None:
+    """The image smoke test runs the container without DATABASE_URL and expects /healthz."""
+    monkeypatch.chdir(tmp_path)  # no .env here
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("METRICS_PORT", raising=False)
+
+    with TestClient(create_app()) as client:
+        assert client.get("/healthz").status_code == 200
