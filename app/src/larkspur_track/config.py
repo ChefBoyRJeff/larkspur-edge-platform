@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     database_connect_timeout: int = 3
     # Release shown in the page footer; the Helm chart sets it to the deployed image tag.
     app_release: str = "local"
+    # Browsers keep Secure cookies only from HTTPS sites. Local development over
+    # http://127.0.0.1 sets SESSION_COOKIE_SECURE=false in app/.env (see scripts/setup-dev-db.sh).
+    session_cookie_secure: bool = True
 
     @field_validator("database_url", "test_database_url")
     @classmethod

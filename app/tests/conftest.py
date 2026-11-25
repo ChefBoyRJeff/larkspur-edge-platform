@@ -1,8 +1,11 @@
 """Shared fixtures. Database tests use TEST_DATABASE_URL (see docs/runbooks/local-dev.md)."""
 
 from collections.abc import Callable, Iterator
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
+import httpx2
 import pytest
 from alembic import command
 from alembic.config import Config
@@ -10,11 +13,20 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session
 
+from larkspur_track.auth import session_cookie_name
 from larkspur_track.config import Settings, get_settings
 from larkspur_track.db import get_engine, get_session
 from larkspur_track.main import app
+from larkspur_track.models import User
+from larkspur_track.passwords import hash_password
+from larkspur_track.roles import UserRole
+from larkspur_track.sessions import start_session
 
 APP_DIR = Path(__file__).resolve().parents[1]
+# The password of every user that make_user creates.
+PHRASE = "correct horse battery staple"
+# HTTPS, as in the cluster, so the client keeps and sends Secure cookies.
+BASE_URL = "https://testserver"
 
 
 def _reset_database_caches() -> None:
@@ -84,10 +96,96 @@ def db_session(test_engine: Engine) -> Iterator[Session]:
 
 
 @pytest.fixture
-def client(db_session: Session) -> Iterator[TestClient]:
-    """The app, using the test session that is rolled back after each test."""
+def fresh_settings() -> Iterator[None]:
+    """Re-read settings for this test, and again afterwards so later tests see the defaults."""
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
+@pytest.fixture(scope="session")
+def phrase_hash() -> str:
+    """Argon2 is slow on purpose, so all test users share one hash of PHRASE."""
+    return hash_password(PHRASE)
+
+
+MakeUser = Callable[..., User]
+
+
+@pytest.fixture
+def make_user(db_session: Session, phrase_hash: str) -> MakeUser:
+    """Create a user whose password is PHRASE."""
+
+    def _make(
+        username: str = "sam.supervisor",
+        role: UserRole = UserRole.SUPERVISOR,
+        *,
+        is_active: bool = True,
+    ) -> User:
+        user = User(
+            username=username,
+            display_name=username.replace(".", " ").title(),
+            role=role,
+            password_hash=phrase_hash,
+            is_active=is_active,
+        )
+        db_session.add(user)
+        db_session.flush()
+        return user
+
+    return _make
+
+
+class SignedInClient(TestClient):
+    """A test client with a session cookie. Its POSTs send the session's CSRF token."""
+
+    csrf_token: str
+
+    def post(  # type: ignore[override]
+        self,
+        url: str,
+        *,
+        data: dict[str, str] | None = None,
+        with_csrf: bool = True,
+        **kwargs: Any,
+    ) -> httpx2.Response:
+        form = dict(data or {})
+        if with_csrf:
+            form.setdefault("csrf_token", self.csrf_token)
+        return super().post(url, data=form, **kwargs)
+
+
+@pytest.fixture
+def use_test_session(db_session: Session) -> Iterator[None]:
+    """Make the app use the test session that is rolled back after each test."""
     app.dependency_overrides[get_session] = lambda: db_session
     try:
-        yield TestClient(app, follow_redirects=False)
+        yield
     finally:
         app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def anonymous_client(use_test_session: None) -> TestClient:
+    """The app with nobody signed in."""
+    return TestClient(app, base_url=BASE_URL, follow_redirects=False)
+
+
+@pytest.fixture
+def sign_in_as(db_session: Session, use_test_session: None) -> Callable[[User], SignedInClient]:
+    """A client signed in as the given user (the sign-in page itself is in test_sign_in.py)."""
+
+    def _sign_in(user: User) -> SignedInClient:
+        token, row = start_session(db_session, user, datetime.now(UTC))
+        signed_in = SignedInClient(app, base_url=BASE_URL, follow_redirects=False)
+        signed_in.csrf_token = row.csrf_token
+        signed_in.cookies.set(session_cookie_name(), token)
+        return signed_in
+
+    return _sign_in
+
+
+@pytest.fixture
+def client(make_user: MakeUser, sign_in_as: Callable[[User], SignedInClient]) -> SignedInClient:
+    """The app with a supervisor signed in."""
+    return sign_in_as(make_user())

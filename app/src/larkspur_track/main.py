@@ -4,12 +4,13 @@ from fastapi import FastAPI, HTTPException
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
+from larkspur_track import auth_routes
 from larkspur_track.db import get_engine
 from larkspur_track.routes import router
 
 
 def create_app() -> FastAPI:
-    """Build the application: health checks plus the shipment pages."""
+    """Build the application: health checks, sign-in, and the shipment pages."""
     app = FastAPI(title="Larkspur Track", version="0.1.0")
 
     @app.get("/healthz", include_in_schema=False)
@@ -27,6 +28,9 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=503, detail="database unavailable") from error
         return {"status": "ready"}
 
+    for exception, handler in auth_routes.EXCEPTION_HANDLERS.items():
+        app.add_exception_handler(exception, handler)
+    app.include_router(auth_routes.router)
     app.include_router(router)
     return app
 

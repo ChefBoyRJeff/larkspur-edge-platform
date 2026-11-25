@@ -29,6 +29,8 @@ cat > "$ENV_FILE" <<EOF
 # Local development settings, written by scripts/setup-dev-db.sh. Never commit this file.
 DATABASE_URL=postgresql+psycopg://larkspur:${PW}@127.0.0.1:5432/larkspur_dev
 TEST_DATABASE_URL=postgresql+psycopg://larkspur:${PW}@127.0.0.1:5432/larkspur_test
+# The development server runs over plain HTTP, where browsers drop Secure cookies.
+SESSION_COOKIE_SECURE=false
 EOF
 
 echo "PostgreSQL $(psql --version | awk '{print $3}') ready: larkspur_dev and larkspur_test."

@@ -1,19 +1,7 @@
 """The page footer shows the running release (APP_RELEASE, set by the Helm chart)."""
 
-from collections.abc import Iterator
-
 import pytest
 from fastapi.testclient import TestClient
-
-from larkspur_track.config import get_settings
-
-
-@pytest.fixture
-def fresh_settings() -> Iterator[None]:
-    """Re-read settings for this test, and again afterwards so later tests see the defaults."""
-    get_settings.cache_clear()
-    yield
-    get_settings.cache_clear()
 
 
 def test_footer_shows_the_release(

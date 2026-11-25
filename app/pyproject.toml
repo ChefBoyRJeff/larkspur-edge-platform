@@ -30,6 +30,8 @@ build-backend = "uv_build"
 [tool.ruff]
 line-length = 100
 target-version = "py314"
+# tests/ is listed so `from conftest import ...` sorts with the project's own imports.
+src = [".", "src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "S"]

@@ -4,6 +4,7 @@
 <p><a href="/shipments">&larr; All shipments</a></p>
 <h1>Receive a shipment</h1>
 <form class="stack" method="post" action="/shipments">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <label for="tracking_number">Tracking number</label>
   <input id="tracking_number" name="tracking_number" value="{{ values.tracking_number }}" required maxlength="40">
   {% if errors.tracking_number %}<p class="error">{{ errors.tracking_number }}</p>{% endif %}

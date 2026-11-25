@@ -1,4 +1,4 @@
-"""ORM models: shipments, their append-only status timeline, and users."""
+"""ORM models: shipments, their append-only status timeline, users and their sessions."""
 
 import uuid
 from datetime import datetime
@@ -91,3 +91,23 @@ class User(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class UserSession(Base):
+    """A signed-in browser. Its cookie holds a random token; only the token's SHA-256 is stored."""
+
+    __tablename__ = "user_sessions"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    # Every form on the session's pages must send this back (CSRF synchronizer token).
+    csrf_token: Mapped[str] = mapped_column(String(64))
+    # Set by the application from one clock, so expiry checks and tests agree.
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+    user: Mapped[User] = relationship()

@@ -7,6 +7,7 @@
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
 {% if next_status %}
 <form class="stack" method="post" action="/shipments/{{ shipment.id }}/advance">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <input type="hidden" name="target" value="{{ next_status }}">
   <label for="note">Note (optional)</label>
   <textarea id="note" name="note" maxlength="500"></textarea>
