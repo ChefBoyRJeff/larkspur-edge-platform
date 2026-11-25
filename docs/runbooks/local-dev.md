@@ -15,6 +15,7 @@ How to set up, run and test Larkspur Track on the admin PC. The database decisio
 | Apply migrations | `uv run alembic upgrade head` |
 | Create a migration | `uv run alembic revision --autogenerate -m "describe the change"`, then review the generated file |
 | Show the current revision | `uv run alembic current` |
+| Create a user (asks for the password) | `uv run larkspur-track-admin create-user --username <name> --display-name "<Full Name>" --role admin` (roles: clerk, supervisor, admin) |
 
 PostgreSQL runs only while WSL is running. If WSL was shut down, open Ubuntu once, or run `wsl -d Ubuntu-26.04 -- sudo service postgresql start`.
 
