@@ -21,7 +21,7 @@ $restore = 'larkspur-db-restore'
 if (kubectl get cluster $restore -n $ns --ignore-not-found -o name) { throw "$restore already exists in $ns; delete it first" }
 
 function Invoke-Sql([string]$Pod, [string]$Sql, [string]$Database = 'larkspur') {
-    $result = kubectl exec -n $ns $Pod -c postgres -- psql -U postgres -d $Database -v ON_ERROR_STOP=1 -tAc $Sql
+    $result = kubectl exec -n $ns $Pod -c postgres -- psql -U postgres -d $Database -v ON_ERROR_STOP=1 -q -tAc $Sql
     if ($LASTEXITCODE) { throw "SQL failed on $Pod" }
     $result
 }
@@ -46,8 +46,10 @@ if ($archived -lt $wal) { throw "WAL $wal did not reach Azure within 5 minutes; 
 "source $source ($Environment): $sourceCounts"
 "marker $marker written; its WAL $wal reached Azure in $([int]((Get-Date) - $t0).TotalSeconds) s"
 
-# 2. The restored cluster, with the same network rules the database has (default-deny otherwise).
-$manifest = @"
+$ok = $false
+try {
+    # 2. The restored cluster, with the same network rules the database has (default-deny otherwise).
+    $manifest = @"
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -118,37 +120,40 @@ spec:
     requests: { cpu: 100m, memory: 256Mi }
     limits: { memory: 512Mi }
 "@
-$start = Get-Date
-$manifest | kubectl apply -f - | Out-Null
-if ($LASTEXITCODE) { throw 'could not create the restore cluster' }
-"restore started $($start.ToString('hh:mm:ss tt'))"
+    $start = Get-Date
+    $manifest | kubectl apply -f - | Out-Null
+    if ($LASTEXITCODE) { throw 'could not create the restore cluster' }
+    "restore started $($start.ToString('hh:mm:ss tt'))"
 
-# 3. Wait until the restored cluster is healthy (up to 30 minutes).
-do {
-    Start-Sleep -Seconds 10
-    $c = kubectl get cluster $restore -n $ns -o json | ConvertFrom-Json
-} until (($c.status.phase -eq 'Cluster in healthy state' -and $c.status.readyInstances -eq 1) -or ((Get-Date) - $start).TotalMinutes -gt 30)
-$rto = [int]((Get-Date) - $start).TotalSeconds
-"restored cluster: $($c.status.phase), ready instances $($c.status.readyInstances), after $rto s"
+    # 3. Wait until the restored cluster is healthy (up to 30 minutes).
+    do {
+        Start-Sleep -Seconds 10
+        $c = kubectl get cluster $restore -n $ns -o json | ConvertFrom-Json
+    } until (($c.status.phase -eq 'Cluster in healthy state' -and $c.status.readyInstances -eq 1) -or ((Get-Date) - $start).TotalMinutes -gt 30)
+    $rto = [int]((Get-Date) - $start).TotalSeconds
+    "restored cluster: $($c.status.phase), ready instances $($c.status.readyInstances), after $rto s"
 
-# 4. Compare.
-$ok = $false
-if ($c.status.readyInstances -eq 1) {
-    $restored = Get-Primary $restore
-    $restoredCounts = Invoke-Sql $restored $countsSql
-    $restoredMarker = Invoke-Sql $restored "select coalesce(max(taken_at)::text, 'missing') from restore_drill_marker where taken_at = '$marker'"
-    "restored $restored ($Environment): $restoredCounts"
-    "marker in the restore: $restoredMarker"
-    $ok = ($restoredCounts -eq $sourceCounts) -and ($restoredMarker -ne 'missing')
+    # 4. Compare.
+    if ($c.status.readyInstances -eq 1) {
+        $restored = Get-Primary $restore
+        $restoredCounts = Invoke-Sql $restored $countsSql
+        $restoredMarker = Invoke-Sql $restored "select coalesce(max(taken_at)::text, 'missing') from restore_drill_marker where taken_at = '$marker'"
+        "restored $restored ($Environment): $restoredCounts"
+        "marker in the restore: $restoredMarker"
+        $ok = ($restoredCounts -eq $sourceCounts) -and ($restoredMarker -ne 'missing')
+    }
+
 }
+finally {
+    # 5. Clean up, also after a failure.
+    Invoke-Sql $source 'drop table if exists restore_drill_marker' | Out-Null
+    if (-not $KeepRestored) {
+        kubectl delete cluster $restore -n $ns --ignore-not-found --wait=true --timeout=120s | Out-Null
+        kubectl delete networkpolicy -n $ns drill-allow-cnpg-operator-to-restore drill-allow-restore-egress --ignore-not-found | Out-Null
+        "cleaned up: $restore and its policies deleted; marker table dropped"
+    } else { "kept $restore; marker table dropped from the source" }
 
-# 5. Clean up.
-Invoke-Sql $source 'drop table if exists restore_drill_marker' | Out-Null
-if (-not $KeepRestored) {
-    kubectl delete cluster $restore -n $ns --wait=true --timeout=120s | Out-Null
-    kubectl delete networkpolicy -n $ns drill-allow-cnpg-operator-to-restore drill-allow-restore-egress | Out-Null
-    "cleaned up: $restore and its policies deleted; marker table dropped"
-} else { "kept $restore; marker table dropped from the source" }
+}
 
 if ($ok) { "RESULT: PASS. Restore of $Environment took $rto s (target 1800 s); counts match; the marker written just before the drill was recovered." }
 else { throw "RESULT: FAIL. See the lines above (phase, counts, marker)." }
