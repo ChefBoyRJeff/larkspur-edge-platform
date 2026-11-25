@@ -1,5 +1,5 @@
 # Dev database: one PostgreSQL 18 instance managed by CloudNativePG.
-# The prod database, backups and restore come in the Data module.
+# Backed up to Azure Blob Storage (larkspur-db-dev-backup.yaml, ADR-0008).
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
@@ -19,6 +19,12 @@ spec:
     initdb:
       database: larkspur
       owner: larkspur
+  # WAL archiving and base backups to Azure Blob Storage (larkspur-db-dev-backup.yaml).
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: larkspur-db-backup
   storage:
     storageClass: local-path
     size: 2Gi
