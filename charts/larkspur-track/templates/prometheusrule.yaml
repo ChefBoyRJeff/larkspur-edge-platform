@@ -1,0 +1,70 @@
+{{- if .Values.metrics.alerts.enabled }}
+{{- $ns := .Release.Namespace }}
+# Alert rules for this environment's Larkspur Track. Prometheus evaluates them; Alertmanager
+# emails warning and critical alerts. What to do for each: docs/runbooks/alerts.md.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: larkspur-track
+  labels:
+    {{- include "larkspur-track.labels" . | nindent 4 }}
+spec:
+  groups:
+    - name: larkspur-track
+      rules:
+        - alert: LarkspurTrackDown
+          # No web pod has answered a Prometheus scrape (all down, or none running).
+          expr: absent(up{job="larkspur-track", namespace="{{ $ns }}"} == 1)
+          for: 2m
+          labels:
+            severity: critical
+            namespace: {{ $ns }}
+          annotations:
+            summary: Larkspur Track in {{ $ns }} is down
+            description: No web pod has answered Prometheus for 2 minutes.
+            runbook: docs/runbooks/alerts.md#larkspurtrackdown
+        - alert: LarkspurTrackUnavailable
+          # Pods may run, but none is ready (readiness needs the database), so users get errors.
+          expr: kube_deployment_status_replicas_available{namespace="{{ $ns }}", deployment="larkspur-track"} == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: Larkspur Track in {{ $ns }} has no ready pods
+            description: No web pod has been ready for 2 minutes; check the database first.
+            runbook: docs/runbooks/alerts.md#larkspurtrackunavailable
+        - alert: LarkspurTrackHighErrorRate
+          # Server errors among real requests (health checks excluded).
+          expr: |
+            sum(rate(larkspur_http_requests_total{namespace="{{ $ns }}", route!~"/healthz|/readyz", status=~"5.."}[5m]))
+              / sum(rate(larkspur_http_requests_total{namespace="{{ $ns }}", route!~"/healthz|/readyz"}[5m]))
+              > 0.05
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: More than 5% of requests to Larkspur Track in {{ $ns }} fail
+            description: Over 5% of requests have returned a 5xx error for 10 minutes.
+            runbook: docs/runbooks/alerts.md#larkspurtrackhigherrorrate
+        - alert: LarkspurTrackSlow
+          expr: |
+            histogram_quantile(0.95,
+              sum by (le) (rate(larkspur_http_request_duration_seconds_bucket{namespace="{{ $ns }}", route!~"/healthz|/readyz"}[10m]))
+            ) > 1
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: Larkspur Track in {{ $ns }} is slow
+            description: The slowest 5% of requests have taken over 1 second for 15 minutes.
+            runbook: docs/runbooks/alerts.md#larkspurtrackslow
+        - alert: LarkspurTrackManyFailedSignIns
+          # Possible password guessing; accounts lock after 5 failures, so look at the audit log.
+          expr: sum(increase(larkspur_sign_ins_total{namespace="{{ $ns }}", result="failure"}[15m])) > 20
+          labels:
+            severity: warning
+          annotations:
+            summary: Many failed sign-ins to Larkspur Track in {{ $ns }}
+            description: More than 20 sign-ins have failed in 15 minutes; check the audit log.
+            runbook: docs/runbooks/alerts.md#larkspurtrackmanyfailedsignins
+{{- end }}
