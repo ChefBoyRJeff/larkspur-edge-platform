@@ -1,0 +1,17 @@
+{{- if .Values.metrics.serviceMonitor.enabled }}
+# Tells Prometheus (kube-prometheus-stack) to scrape the web pods' metrics port.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: larkspur-track
+  labels:
+    {{- include "larkspur-track.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "larkspur-track.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: {{ .Values.metrics.serviceMonitor.interval }}
+{{- end }}

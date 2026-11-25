@@ -55,9 +55,13 @@ spec:
             # Shown in the page footer, so anyone can see which release an environment runs.
             - name: APP_RELEASE
               value: {{ .Values.image.tag | quote }}
+            - name: METRICS_PORT
+              value: {{ .Values.metrics.port | quote }}
           ports:
             - name: http
               containerPort: 8000
+            - name: metrics
+              containerPort: {{ .Values.metrics.port }}
           # Ready only when PostgreSQL answers (/readyz gives up after the 3 s connect timeout).
           readinessProbe:
             httpGet:
