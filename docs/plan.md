@@ -41,7 +41,7 @@ Larkspur Logistics (fictional) opens a regional warehouse. Staff need shipment t
 | Foundation | Repository, plan, ADR-0001, conventions | Repo structure, .gitignore, .gitattributes, plan approved; k3s cluster running | Done |
 | Infrastructure | Ansible: base configuration, SSH hardening, k3s at a pinned version | Second playbook run reports 0 changes; lark-k3s-02 rebuilt from a blank card by the playbook rejoins Ready | Done |
 | Platform | Argo CD, cert-manager + internal CA, Sealed Secrets, dev/prod namespaces, RBAC, restricted pod security, default-deny network policies | A test page is served over trusted HTTPS by hostname; default-deny and restricted pod security enforced | Done |
-| Application | Larkspur Track: shipments, status workflow (received -> stored -> picked -> shipped), timeline, search, dashboard, Alembic migrations, sign-in, clerk/supervisor/admin roles, audit trail | Invalid transitions rejected; migrations apply cleanly; unit tests pass; argon2 password hashing; per-role permissions tested; every change audited | In progress (core done) |
+| Application | Larkspur Track: shipments, status workflow (received -> stored -> picked -> shipped), timeline, search, dashboard, Alembic migrations, sign-in, clerk/supervisor/admin roles, audit trail | Invalid transitions rejected; migrations apply cleanly; unit tests pass; argon2 password hashing; per-role permissions tested; every change audited | Done |
 | CI/CD | GitHub Actions, arm64 + amd64 images, Trivy, versioned GHCR images, CloudNativePG operator + dev and prod databases, Helm chart, Argo CD dev -> prod by pull request | PRs run lint + tests; merges build both architectures; promotion by PR; rollback by revert works | Done |
 | Data | Scheduled CloudNativePG backups to Azure Blob, restore | Azure cost approved first; restore to a new instance works; RPO/RTO targets met | Planned |
 | Integration | Offline-first outbox sync to Azure | With the uplink cut, staff keep working; when it returns, every event is delivered exactly once | Planned |
@@ -61,6 +61,7 @@ Larkspur Logistics (fictional) opens a regional warehouse. Staff need shipment t
 | Single control plane | Accepted for v1; backups + Ansible allow a full rebuild |
 | Data tied to one node | Backups + tested restore |
 | Prod database has no backups until the Data module | Prod holds synthetic data only until then; scheduled backups and a tested restore are the Data module's first deliverable |
+| Audit log trigger can be dropped by the app's database role (table owner) | Guards against bugs and mistakes; a separate audit role without UPDATE/DELETE rights is the upgrade path (ADR-0006) |
 | No internal DNS yet | hosts-file entries until Pi-hole (Phase 2) |
 | Switch firmware end-of-life | Admin access limited to the home network |
 | Internal root CA trusted by the admin PC (key compromise could impersonate any site) | Key stays in the cluster (cert-manager namespace); trusted for the current Windows user only; removable in certmgr.msc; name constraints considered later |
@@ -71,6 +72,8 @@ Larkspur Logistics (fictional) opens a regional warehouse. Staff need shipment t
 |---|---|---|
 | Application stack | Foundation | Python + FastAPI (ADR-0001) |
 | Ansible control node | Infrastructure | WSL2 Ubuntu 26.04 on the admin PC, dedicated SSH key |
+| Sign-in, sessions, roles, audit log | Application | Local accounts, Argon2id, database sessions (ADR-0006) |
+| Client IP at the ingress | Application | Traefik DaemonSet, externalTrafficPolicy Local (ADR-0005) |
 | Alert channel and SLO targets | Operations | Open |
 | Sync target | Integration | Open (recommended: Azure Storage Queue, after pricing) |
 

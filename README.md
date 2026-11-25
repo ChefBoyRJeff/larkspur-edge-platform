@@ -4,7 +4,7 @@
 
 **Larkspur Track**: an offline-first shipment tracking system for a (fictional) Larkspur Logistics regional warehouse, running on a 2-node **k3s** Kubernetes cluster of Raspberry Pi 5s, built and operated with production practices: Ansible, GitHub Actions, Argo CD (GitOps), cert-manager, Sealed Secrets, CloudNativePG, Prometheus/Grafana, and Azure for off-site backups and sync.
 
-> **Status:** Foundation, Infrastructure, Platform and CI/CD done; Application core done, sign-in next. See [docs/plan.md](docs/plan.md).
+> **Status:** Foundation, Infrastructure, Platform, CI/CD and Application done; Operations (monitoring) next. See [docs/plan.md](docs/plan.md).
 
 | Host | Hardware | Role |
 |---|---|---|
@@ -78,12 +78,14 @@ Both app namespaces enforce the `restricted` Pod Security profile, deny all netw
 
 Releases are pull requests that change the image tag; rollbacks are reverts. See [docs/runbooks/release-and-rollback.md](docs/runbooks/release-and-rollback.md).
 
+Both environments require sign-in, with clerk, supervisor and admin roles and an append-only audit log (ADR-0006). Users are managed on the Users page; see [docs/runbooks/user-administration.md](docs/runbooks/user-administration.md).
+
 ## Repository layout
 | Path | Contents |
 |---|---|
 | ansible/ | Node configuration: inventory, roles (common, k3s_server, k3s_agent), site.yml (configure), patch.yml (rolling OS updates) |
 | app/ | Larkspur Track (FastAPI, Jinja2, PostgreSQL): uv project, source in src/larkspur_track/, tests in tests/ |
-| platform/ | GitOps manifests: bootstrap/ (root app), apps/ (Argo CD Applications), argocd/ (Argo CD Helm values), config/ (CA issuers, app namespaces and guardrails, HTTPS test page) |
+| platform/ | GitOps manifests: bootstrap/ (root app), apps/ (Argo CD Applications), argocd/ (Argo CD Helm values), config/ (CA issuers, app namespaces and guardrails, databases, Traefik settings, HTTPS test page) |
 | charts/ | Helm chart for Larkspur Track (web Deployment, migration job, Service, Ingress, Certificate, network policies) with per-environment values |
 | docs/ | Plan, architecture decision records, runbooks, AI-use log |
 | .github/ | CI: pull request checks, multi-arch image builds to GHCR (amd64 + arm64), Dependabot |
