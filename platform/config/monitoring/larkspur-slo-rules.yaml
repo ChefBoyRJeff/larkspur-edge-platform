@@ -1,0 +1,157 @@
+# Larkspur Track SLOs (prod), measured over a rolling 7 days (Prometheus keeps 7 days of data):
+#   availability: 99.5% of real requests succeed (no 5xx)        -> error budget 0.5%
+#   latency:      99% of real requests answer within 1 second      -> error budget 1%
+# Real requests exclude the /healthz and /readyz health checks. Dev is recorded for the
+# dashboard but has no SLO. Alerts fire on how fast the budget is being used (burn rate),
+# with a long and a short window that must both agree. What to do: docs/runbooks/alerts.md.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: larkspur-slo
+  namespace: monitoring
+  annotations:
+    # The CRD comes from kube-prometheus-stack; platform-config retries the sync until it exists.
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  groups:
+    - name: larkspur-slo-short
+      interval: 30s
+      rules:
+        - record: larkspur:slo_errors:ratio_rate5m
+          expr: sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz", status=~"5.."}[5m])) / sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz"}[5m]))
+        - record: larkspur:slo_errors:ratio_rate30m
+          expr: sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz", status=~"5.."}[30m])) / sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz"}[30m]))
+        - record: larkspur:slo_errors:ratio_rate1h
+          expr: sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz", status=~"5.."}[1h])) / sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz"}[1h]))
+        - record: larkspur:slo_errors:ratio_rate2h
+          expr: sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz", status=~"5.."}[2h])) / sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz"}[2h]))
+        - record: larkspur:slo_errors:ratio_rate6h
+          expr: sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz", status=~"5.."}[6h])) / sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz"}[6h]))
+        - record: larkspur:slo_errors:ratio_rate1d
+          expr: sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz", status=~"5.."}[1d])) / sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz"}[1d]))
+        - record: larkspur:slo_slow:ratio_rate5m
+          expr: 1 - sum by (namespace) (rate(larkspur_http_request_duration_seconds_bucket{route!~"/healthz|/readyz", le="1.0"}[5m])) / sum by (namespace) (rate(larkspur_http_request_duration_seconds_count{route!~"/healthz|/readyz"}[5m]))
+        - record: larkspur:slo_slow:ratio_rate30m
+          expr: 1 - sum by (namespace) (rate(larkspur_http_request_duration_seconds_bucket{route!~"/healthz|/readyz", le="1.0"}[30m])) / sum by (namespace) (rate(larkspur_http_request_duration_seconds_count{route!~"/healthz|/readyz"}[30m]))
+        - record: larkspur:slo_slow:ratio_rate1h
+          expr: 1 - sum by (namespace) (rate(larkspur_http_request_duration_seconds_bucket{route!~"/healthz|/readyz", le="1.0"}[1h])) / sum by (namespace) (rate(larkspur_http_request_duration_seconds_count{route!~"/healthz|/readyz"}[1h]))
+        - record: larkspur:slo_slow:ratio_rate2h
+          expr: 1 - sum by (namespace) (rate(larkspur_http_request_duration_seconds_bucket{route!~"/healthz|/readyz", le="1.0"}[2h])) / sum by (namespace) (rate(larkspur_http_request_duration_seconds_count{route!~"/healthz|/readyz"}[2h]))
+        - record: larkspur:slo_slow:ratio_rate6h
+          expr: 1 - sum by (namespace) (rate(larkspur_http_request_duration_seconds_bucket{route!~"/healthz|/readyz", le="1.0"}[6h])) / sum by (namespace) (rate(larkspur_http_request_duration_seconds_count{route!~"/healthz|/readyz"}[6h]))
+        - record: larkspur:slo_slow:ratio_rate1d
+          expr: 1 - sum by (namespace) (rate(larkspur_http_request_duration_seconds_bucket{route!~"/healthz|/readyz", le="1.0"}[1d])) / sum by (namespace) (rate(larkspur_http_request_duration_seconds_count{route!~"/healthz|/readyz"}[1d]))
+        - record: larkspur:slo_requests:rate1h
+          expr: sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz"}[1h]))
+        - record: larkspur:slo_requests:rate6h
+          expr: sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz"}[6h]))
+        - record: larkspur:slo_requests:rate1d
+          expr: sum by (namespace) (rate(larkspur_http_requests_total{route!~"/healthz|/readyz"}[1d]))
+    - name: larkspur-slo-7d
+      # Reads 7 days of counters, so it runs every 5 minutes instead of every 30 seconds.
+      interval: 5m
+      rules:
+        - record: larkspur:slo_errors:ratio_rate7d
+          expr: sum by (namespace) (increase(larkspur_http_requests_total{route!~"/healthz|/readyz", status=~"5.."}[7d])) / sum by (namespace) (increase(larkspur_http_requests_total{route!~"/healthz|/readyz"}[7d]))
+        - record: larkspur:slo_slow:ratio_rate7d
+          expr: 1 - sum by (namespace) (increase(larkspur_http_request_duration_seconds_bucket{route!~"/healthz|/readyz", le="1.0"}[7d])) / sum by (namespace) (increase(larkspur_http_request_duration_seconds_count{route!~"/healthz|/readyz"}[7d]))
+        - record: larkspur:slo_availability:target
+          expr: vector(0.995)
+          labels:
+            namespace: larkspur-prod
+        - record: larkspur:slo_latency:target
+          expr: vector(0.99)
+          labels:
+            namespace: larkspur-prod
+    - name: larkspur-slo-alerts
+      rules:
+        - alert: LarkspurTrackErrorBudgetBurn
+          # 10% of the weekly budget in 1 hour (burn rate 16.8); both windows must agree,
+          # and at least 50 real requests in the long window, so a single error on a quiet hour can't page.
+          expr: |
+            larkspur:slo_errors:ratio_rate1h{namespace="larkspur-prod"} > 0.084
+              and larkspur:slo_errors:ratio_rate5m{namespace="larkspur-prod"} > 0.084
+              and larkspur:slo_requests:rate1h{namespace="larkspur-prod"} * 3600 >= 50
+          labels:
+            severity: critical
+            namespace: larkspur-prod
+            window: 1h
+          annotations:
+            summary: Larkspur Track prod is using its availability budget too fast
+            description: "At this rate, 10% of the weekly availability error budget is gone in 1 hour ({{ $value | humanizePercentage }} of requests failing the SLO)."
+            runbook: docs/runbooks/alerts.md#larkspurtrackerrorbudgetburn
+        - alert: LarkspurTrackErrorBudgetBurn
+          # 25% of the weekly budget in 6 hours (burn rate 7); both windows must agree,
+          # and at least 50 real requests in the long window, so a single error on a quiet hour can't page.
+          expr: |
+            larkspur:slo_errors:ratio_rate6h{namespace="larkspur-prod"} > 0.035
+              and larkspur:slo_errors:ratio_rate30m{namespace="larkspur-prod"} > 0.035
+              and larkspur:slo_requests:rate6h{namespace="larkspur-prod"} * 21600 >= 50
+          labels:
+            severity: critical
+            namespace: larkspur-prod
+            window: 6h
+          annotations:
+            summary: Larkspur Track prod is using its availability budget too fast
+            description: "At this rate, 25% of the weekly availability error budget is gone in 6 hours ({{ $value | humanizePercentage }} of requests failing the SLO)."
+            runbook: docs/runbooks/alerts.md#larkspurtrackerrorbudgetburn
+        - alert: LarkspurTrackErrorBudgetBurn
+          # 50% of the weekly budget in 1 day (burn rate 3.5); both windows must agree,
+          # and at least 50 real requests in the long window, so a single error on a quiet hour can't page.
+          expr: |
+            larkspur:slo_errors:ratio_rate1d{namespace="larkspur-prod"} > 0.0175
+              and larkspur:slo_errors:ratio_rate2h{namespace="larkspur-prod"} > 0.0175
+              and larkspur:slo_requests:rate1d{namespace="larkspur-prod"} * 86400 >= 50
+          labels:
+            severity: warning
+            namespace: larkspur-prod
+            window: 1d
+          annotations:
+            summary: Larkspur Track prod is using its availability budget too fast
+            description: "At this rate, 50% of the weekly availability error budget is gone in 1 day ({{ $value | humanizePercentage }} of requests failing the SLO)."
+            runbook: docs/runbooks/alerts.md#larkspurtrackerrorbudgetburn
+        - alert: LarkspurTrackLatencyBudgetBurn
+          # 10% of the weekly budget in 1 hour (burn rate 16.8); both windows must agree,
+          # and at least 50 real requests in the long window, so a single error on a quiet hour can't page.
+          expr: |
+            larkspur:slo_slow:ratio_rate1h{namespace="larkspur-prod"} > 0.168
+              and larkspur:slo_slow:ratio_rate5m{namespace="larkspur-prod"} > 0.168
+              and larkspur:slo_requests:rate1h{namespace="larkspur-prod"} * 3600 >= 50
+          labels:
+            severity: critical
+            namespace: larkspur-prod
+            window: 1h
+          annotations:
+            summary: Larkspur Track prod is using its latency budget too fast
+            description: "At this rate, 10% of the weekly latency error budget is gone in 1 hour ({{ $value | humanizePercentage }} of requests failing the SLO)."
+            runbook: docs/runbooks/alerts.md#larkspurtracklatencybudgetburn
+        - alert: LarkspurTrackLatencyBudgetBurn
+          # 25% of the weekly budget in 6 hours (burn rate 7); both windows must agree,
+          # and at least 50 real requests in the long window, so a single error on a quiet hour can't page.
+          expr: |
+            larkspur:slo_slow:ratio_rate6h{namespace="larkspur-prod"} > 0.07
+              and larkspur:slo_slow:ratio_rate30m{namespace="larkspur-prod"} > 0.07
+              and larkspur:slo_requests:rate6h{namespace="larkspur-prod"} * 21600 >= 50
+          labels:
+            severity: critical
+            namespace: larkspur-prod
+            window: 6h
+          annotations:
+            summary: Larkspur Track prod is using its latency budget too fast
+            description: "At this rate, 25% of the weekly latency error budget is gone in 6 hours ({{ $value | humanizePercentage }} of requests failing the SLO)."
+            runbook: docs/runbooks/alerts.md#larkspurtracklatencybudgetburn
+        - alert: LarkspurTrackLatencyBudgetBurn
+          # 50% of the weekly budget in 1 day (burn rate 3.5); both windows must agree,
+          # and at least 50 real requests in the long window, so a single error on a quiet hour can't page.
+          expr: |
+            larkspur:slo_slow:ratio_rate1d{namespace="larkspur-prod"} > 0.035
+              and larkspur:slo_slow:ratio_rate2h{namespace="larkspur-prod"} > 0.035
+              and larkspur:slo_requests:rate1d{namespace="larkspur-prod"} * 86400 >= 50
+          labels:
+            severity: warning
+            namespace: larkspur-prod
+            window: 1d
+          annotations:
+            summary: Larkspur Track prod is using its latency budget too fast
+            description: "At this rate, 50% of the weekly latency error budget is gone in 1 day ({{ $value | humanizePercentage }} of requests failing the SLO)."
+            runbook: docs/runbooks/alerts.md#larkspurtracklatencybudgetburn
