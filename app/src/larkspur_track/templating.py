@@ -20,6 +20,7 @@ def _page_context(request: Request) -> dict[str, Any]:
         "app_release": get_settings().app_release,
         "current_user": auth,
         "csrf_token": auth.csrf_token if auth else "",
+        "is_supervisor": auth is not None and has_role(auth.role, UserRole.SUPERVISOR),
         "is_admin": auth is not None and has_role(auth.role, UserRole.ADMIN),
     }
 

@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
 
+from larkspur_track.audit import AuditAction, record_by
 from larkspur_track.auth import SessionDep, SignedIn, require_admin
 from larkspur_track.models import User
 from larkspur_track.roles import UserRole
@@ -70,6 +71,12 @@ def _user_page(
     return render(request, "admin/user_detail.html", context, status_code)
 
 
+def _audit(
+    session: Session, request: Request, auth: SignedIn, action: AuditAction, user: User, detail: str
+) -> None:
+    record_by(session, request, auth, action, target_type="user", target_id=user.id, detail=detail)
+
+
 def _back(user_id: uuid.UUID, done: str) -> RedirectResponse:
     return RedirectResponse(f"/admin/users/{user_id}?done={done}", status_code=303)
 
@@ -91,6 +98,7 @@ def new_user_page(request: Request) -> HTMLResponse:
 def add_user(
     request: Request,
     session: SessionDep,
+    auth: AdminDep,
     username: FormText = "",
     display_name: FormText = "",
     role: FormText = "",
@@ -114,6 +122,8 @@ def add_user(
                 password=password,
             )
             user_id = user.id
+            detail = f"{user.username} as {user.role}"
+            _audit(session, request, auth, AuditAction.USER_CREATED, user, detail)
             session.commit()
             return _back(user_id, "created")
         except UserInputError as problem:
@@ -138,11 +148,14 @@ def update_role(
     chosen = _role(role)
     if user is None or chosen is None:
         return _user_page(request, session, user_id, error="Choose a role.", status_code=422)
+    previous = user.role
     try:
         change_role(session, user, chosen, by=auth.user_id)
     except UserInputError as problem:
         session.rollback()
         return _user_page(request, session, user_id, error=str(problem), status_code=422)
+    detail = f"{user.username}: {previous} → {chosen}"
+    _audit(session, request, auth, AuditAction.USER_ROLE_CHANGED, user, detail)
     session.commit()
     return _back(user_id, "role")
 
@@ -163,6 +176,8 @@ def update_active(
     except UserInputError as problem:
         session.rollback()
         return _user_page(request, session, user_id, error=str(problem), status_code=422)
+    action = AuditAction.USER_REACTIVATED if active == "true" else AuditAction.USER_DEACTIVATED
+    _audit(session, request, auth, action, user, user.username)
     session.commit()
     return _back(user_id, "reactivated" if active == "true" else "deactivated")
 
@@ -172,6 +187,7 @@ def update_password(
     request: Request,
     user_id: uuid.UUID,
     session: SessionDep,
+    auth: AdminDep,
     password: FormText = "",
     confirm: FormText = "",
 ) -> Response:
@@ -185,15 +201,19 @@ def update_password(
     except UserInputError as problem:
         session.rollback()
         return _user_page(request, session, user_id, error=str(problem), status_code=422)
+    _audit(session, request, auth, AuditAction.USER_PASSWORD_RESET, user, user.username)
     session.commit()
     return _back(user_id, "password")
 
 
 @router.post("/{user_id}/unlock")
-def unlock_user(request: Request, user_id: uuid.UUID, session: SessionDep) -> Response:
+def unlock_user(
+    request: Request, user_id: uuid.UUID, session: SessionDep, auth: AdminDep
+) -> Response:
     user = session.get(User, user_id)
     if user is None:
         return _user_page(request, session, user_id)
     unlock(session, user)
+    _audit(session, request, auth, AuditAction.USER_UNLOCKED, user, user.username)
     session.commit()
     return _back(user_id, "unlocked")

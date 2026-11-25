@@ -7,6 +7,7 @@ from urllib.parse import urlencode
 from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
+from larkspur_track.audit import AuditAction, client_address, record, record_by
 from larkspur_track.auth import (
     SIGN_IN_FAILED,
     CsrfRejected,
@@ -25,6 +26,7 @@ from larkspur_track.auth import (
 )
 from larkspur_track.sessions import end_session, start_session
 from larkspur_track.templating import render
+from larkspur_track.users import find_user, is_locked, normalize_username
 
 router = APIRouter()
 FormText = Annotated[str, Form()]
@@ -56,7 +58,21 @@ def sign_in(
     now = datetime.now(UTC)
     user = authenticate(session, username, password, now)
     if user is None:
-        session.commit()  # keep the failed-attempt count and any lockout
+        known = find_user(session, username)
+        detail = None
+        if known is not None and not known.is_active:
+            detail = "account deactivated"
+        elif known is not None and is_locked(known, now):
+            detail = "account locked"
+        record(
+            session,
+            AuditAction.SIGN_IN_FAILED,
+            actor_id=known.id if known else None,
+            actor_username=normalize_username(username) or None,
+            detail=detail,
+            client_ip=client_address(request),
+        )
+        session.commit()  # keep the failed-attempt count, any lockout and the audit entry
         context = {"next": target, "username": username.strip(), "error": SIGN_IN_FAILED}
         return render(request, "sign_in.html", context, 422)
     # A new token at every sign-in, so a token planted before sign-in is never reused.
@@ -64,6 +80,13 @@ def sign_in(
     if old_token:
         end_session(session, old_token)
     token, _ = start_session(session, user, now)
+    record(
+        session,
+        AuditAction.SIGNED_IN,
+        actor_id=user.id,
+        actor_username=user.username,
+        client_ip=client_address(request),
+    )
     session.commit()
     response = RedirectResponse(target, status_code=303)
     set_session_cookie(response, token)
@@ -79,6 +102,7 @@ def sign_out(
     token = request.cookies.get(session_cookie_name())
     if token:
         end_session(session, token)
+    record_by(session, request, auth, AuditAction.SIGNED_OUT)
     session.commit()
     response = RedirectResponse("/sign-in", status_code=303)
     clear_session_cookie(response)

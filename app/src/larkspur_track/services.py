@@ -23,6 +23,7 @@ def create_shipment(
     consignee: str,
     destination: str,
     note: str | None = None,
+    actor_id: uuid.UUID | None = None,
 ) -> Shipment:
     """Register a received shipment and record the first timeline event."""
     shipment = Shipment(
@@ -32,7 +33,9 @@ def create_shipment(
         status=ShipmentStatus.RECEIVED,
     )
     shipment.events.append(
-        ShipmentEvent(from_status=None, to_status=ShipmentStatus.RECEIVED, note=note)
+        ShipmentEvent(
+            from_status=None, to_status=ShipmentStatus.RECEIVED, note=note, actor_user_id=actor_id
+        )
     )
     session.add(shipment)
     session.flush()
@@ -44,6 +47,7 @@ def advance_shipment(
     shipment_id: uuid.UUID,
     target: ShipmentStatus,
     note: str | None = None,
+    actor_id: uuid.UUID | None = None,
 ) -> ShipmentEvent:
     """Move a shipment to its next status. The row is locked so two clerks cannot both move it."""
     statement = (
@@ -56,7 +60,9 @@ def advance_shipment(
     if shipment is None:
         raise ShipmentNotFoundError(str(shipment_id))
     check_transition(shipment.status, target)
-    event = ShipmentEvent(from_status=shipment.status, to_status=target, note=note)
+    event = ShipmentEvent(
+        from_status=shipment.status, to_status=target, note=note, actor_user_id=actor_id
+    )
     shipment.events.append(event)
     shipment.status = target
     session.flush()

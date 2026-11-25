@@ -13,6 +13,7 @@ from getpass import getpass
 
 from sqlalchemy.orm import Session
 
+from larkspur_track.audit import AuditAction, record
 from larkspur_track.db import get_engine
 from larkspur_track.models import User
 from larkspur_track.roles import UserRole
@@ -44,7 +45,7 @@ def run_create_user(
         print("The passwords do not match. No user was created.", file=sys.stderr)
         return None
     try:
-        return create_user(
+        user = create_user(
             session,
             username=args.username,
             display_name=args.display_name,
@@ -54,6 +55,9 @@ def run_create_user(
     except UserInputError as error:
         print(f"{error} No user was created.", file=sys.stderr)
         return None
+    detail = f"{user.username} as {user.role} (larkspur-track-admin)"
+    record(session, AuditAction.USER_CREATED, target_type="user", target_id=user.id, detail=detail)
+    return user
 
 
 def main(argv: Sequence[str] | None = None, prompt: PasswordPrompt = getpass) -> int:
