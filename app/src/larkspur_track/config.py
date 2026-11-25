@@ -42,6 +42,16 @@ class Settings(BaseSettings):
         return None if value is None else use_psycopg_driver(value)
 
 
+class MetricsSettings(BaseSettings):
+    """Read at startup, apart from Settings, so the app starts (and /healthz answers) even
+    without DATABASE_URL, as in the image smoke test."""
+
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    # Port for Prometheus metrics; 0 turns the metrics server off (the default for local runs).
+    metrics_port: int = 0
+
+
 @lru_cache
 def get_settings() -> Settings:
     """Load settings once per process."""
