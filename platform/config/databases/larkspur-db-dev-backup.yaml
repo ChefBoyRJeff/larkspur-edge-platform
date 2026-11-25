@@ -1,0 +1,46 @@
+# Off-site backups for the dev database (Data module, ADR-0008): WAL is archived continuously and a
+# base backup is taken every night, both to Azure Blob Storage through the Barman Cloud plugin.
+# The credential (a SAS token for the dev container only) is larkspur-db-dev-backup-credentials.sealedsecret.yaml,
+# created by azure/backup/new-backup-credential.ps1. The CRDs come from other apps; platform-config retries.
+---
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: larkspur-db-backup
+  namespace: larkspur-dev
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  configuration:
+    destinationPath: https://stlarkbkpzw5iikganlkqo.blob.core.windows.net/larkspur-backups-dev
+    azureCredentials:
+      storageAccount:
+        name: larkspur-db-backup-credentials
+        key: AZURE_STORAGE_ACCOUNT
+      storageSasToken:
+        name: larkspur-db-backup-credentials
+        key: AZURE_STORAGE_SAS_TOKEN
+    wal:
+      compression: gzip
+    data:
+      compression: gzip
+  # Base backups and the WAL needed to restore to any point in the last 30 days.
+  retentionPolicy: "30d"
+---
+# 08:00 UTC (03:00 EST), and once right away when created. CloudNativePG cron has a seconds field.
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: larkspur-db-nightly
+  namespace: larkspur-dev
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  schedule: "0 0 8 * * *"
+  immediate: true
+  backupOwnerReference: self
+  cluster:
+    name: larkspur-db
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io

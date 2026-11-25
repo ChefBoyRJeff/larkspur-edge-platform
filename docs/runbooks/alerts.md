@@ -110,9 +110,31 @@ sum by (application_name, state) (cnpg_backends_total{namespace="larkspur-prod"}
 **Fix:** expected growth → plan a bigger volume or the USB SSD upgrade (plan.md, risks). Unexpected growth → find the table and the cause before deleting anything.
 
 ### LarkspurDatabaseMetricsFailing
-**Meaning:** CloudNativePG could not query PostgreSQL for its metrics for 10 minutes; database alerts may be blind.
+**Meaning:** CloudNativePG could not query PostgreSQL for its metrics for 10 minutes; database and backup alerts may be blind.
 **Check:** `kubectl logs -n larkspur-prod larkspur-db-1 --tail=100 | Select-String -Pattern 'error' -SimpleMatch`
 **Fix:** usually PostgreSQL itself is unhealthy (see `LarkspurDatabaseDown`) or a custom metrics query broke after an operator upgrade.
+
+## Backups
+Each database archives its WAL to Azure Blob Storage continuously and takes a base backup every night at 08:00 UTC (Data module, ADR-0008). Restores: `docs/runbooks/backups.md`.
+
+### LarkspurWalArchivingFailing
+**Meaning:** a WAL file failed to reach Azure in the last 10 minutes and none has succeeded since. Changes since the last successful archive exist only on the node's SD card, and PostgreSQL keeps the unarchived WAL, so its disk use grows.
+**Check:**
+```powershell
+kubectl logs -n larkspur-prod larkspur-db-1 -c plugin-barman-cloud --tail=50
+kubectl get objectstore larkspur-db-backup -n larkspur-prod -o yaml
+```
+`AuthenticationFailed` or `403` → the SAS token expired or its access policy was removed; a connection error → the node's internet connection or `allow-larkspur-db-to-azure-blob`.
+**Fix:** credential problems → create a new one (`docs/runbooks/backups.md`, "Rotate the credential"). Network problems → once the connection returns, PostgreSQL archives the backlog by itself; check that the alert clears.
+
+### LarkspurBackupTooOld
+**Meaning:** the newest base backup in Azure is more than 26 hours old, or there is none: last night's backup failed.
+**Check:**
+```powershell
+kubectl get backups -n larkspur-prod --sort-by=.metadata.creationTimestamp
+kubectl describe backup -n larkspur-prod <newest backup>
+```
+**Fix:** the backup's events and the plugin log (above) give the cause, usually the same as for WAL archiving. To take a backup now: `docs/runbooks/backups.md`, "Take a backup now".
 
 ## Certificates
 Certificates last 90 days and renew 15 days before expiry; the root CA lasts 10 years.
