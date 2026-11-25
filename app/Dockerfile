@@ -23,6 +23,13 @@ RUN test -f /app/.venv/lib/python3.14/site-packages/larkspur_track/templates/bas
 
 # --- runtime stage: no uv, no build tools, non-root ---
 FROM python:3.14-slim-trixie AS runtime
+# Debian security fixes published after the python image was built. CI passes its run ID as
+# APT_REFRESH, so this layer is rebuilt on every run instead of reused from an older cache.
+ARG APT_REFRESH=local
+RUN echo "security updates: ${APT_REFRESH}" \
+    && apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
 RUN groupadd --system --gid 10001 larkspur \
     && useradd --system --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin larkspur
 # The base image ships pip, which carries its own copies of urllib3, msgpack and setuptools.
