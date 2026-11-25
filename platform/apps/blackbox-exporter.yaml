@@ -1,0 +1,85 @@
+# Blackbox exporter: loads Larkspur's HTTPS pages from inside the cluster the way a user's
+# browser does (name -> Traefik on lark-k3s-01 -> TLS -> app), so Prometheus can alert when a
+# page fails or is slow. The CA certificate and alert rules live in platform/config/monitoring.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: blackbox-exporter
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: prometheus-blackbox-exporter
+    targetRevision: 12.0.0
+    helm:
+      valuesObject:
+        fullnameOverride: blackbox-exporter
+        # Same names and address as the admin PC's hosts file, until internal DNS (Phase 2).
+        hostAliases:
+          - ip: 192.168.1.199
+            hostNames:
+              - track.larkspur.home.arpa
+              - track-dev.larkspur.home.arpa
+              - grafana.larkspur.home.arpa
+        config:
+          modules:
+            http_2xx:
+              prober: http
+              timeout: 5s
+              http:
+                preferred_ip_protocol: ip4
+                valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+                valid_status_codes: [200]
+                follow_redirects: false
+                fail_if_not_ssl: true
+                tls_config:
+                  ca_file: /etc/blackbox-exporter/ca.crt
+        # Only the root CA certificate (ca.crt) from blackbox-exporter-ca; the key is not mounted.
+        extraSecretMounts:
+          - name: larkspur-ca
+            secretName: blackbox-exporter-ca
+            mountPath: /etc/blackbox-exporter/ca.crt
+            subPath: ca.crt
+            readOnly: true
+            defaultMode: 420
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 64Mi
+        # One Probe per page, every 30 s. "target" names the page in alerts; "namespace" puts
+        # the alert with the environment it belongs to.
+        probe:
+          enabled: true
+          targets:
+            - name: track-prod
+              url: https://track.larkspur.home.arpa/readyz
+              additionalMetricsRelabels:
+                namespace: larkspur-prod
+            - name: track-dev
+              url: https://track-dev.larkspur.home.arpa/readyz
+              additionalMetricsRelabels:
+                namespace: larkspur-dev
+            - name: grafana
+              url: https://grafana.larkspur.home.arpa/api/health
+              additionalMetricsRelabels:
+                namespace: monitoring
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
+      # The Probe CRD comes from kube-prometheus-stack; on a rebuilt cluster it may not exist yet.
+      - SkipDryRunOnMissingResource=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

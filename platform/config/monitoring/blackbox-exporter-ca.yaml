@@ -1,0 +1,22 @@
+# Issued only so cert-manager writes the Larkspur root CA certificate (ca.crt) into the
+# monitoring namespace; the blackbox exporter mounts that file to trust Larkspur's HTTPS pages.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: blackbox-exporter-ca
+  namespace: monitoring
+spec:
+  secretName: blackbox-exporter-ca
+  commonName: blackbox-exporter.monitoring.svc
+  dnsNames:
+    - blackbox-exporter.monitoring.svc
+  duration: 2160h
+  renewBefore: 360h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  issuerRef:
+    name: larkspur-ca
+    kind: ClusterIssuer
+    group: cert-manager.io
