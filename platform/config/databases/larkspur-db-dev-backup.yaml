@@ -27,7 +27,9 @@ spec:
   # Base backups and the WAL needed to restore to any point in the last 30 days.
   retentionPolicy: "30d"
 ---
-# 08:00 UTC (03:00 EST), and once right away when created. CloudNativePG cron has a seconds field.
+# 08:00 UTC (03:00 EST); CloudNativePG cron has a seconds field. No "immediate" backup: when this
+# is created together with the plugin, the database pod is still restarting and the backup fails
+# ("requested plugin is not available"). Take the first one by hand (docs/runbooks/backups.md).
 apiVersion: postgresql.cnpg.io/v1
 kind: ScheduledBackup
 metadata:
@@ -37,7 +39,6 @@ metadata:
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   schedule: "0 0 8 * * *"
-  immediate: true
   backupOwnerReference: self
   cluster:
     name: larkspur-db

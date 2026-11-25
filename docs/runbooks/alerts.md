@@ -219,11 +219,11 @@ The password comes from the SealedSecret `grafana-admin` (keys `admin-user`, `ad
    if ($pw.Length -lt 16) { throw "clipboard holds $($pw.Length) characters; copy the password again" }
    $dir = New-Item -ItemType Directory (Join-Path $env:TEMP ([guid]::NewGuid()))
    try {
-     Set-Content -NoNewline (Join-Path $dir 'admin-user') 'admin'; Set-Content -NoNewline (Join-Path $dir 'admin-password') $pw
-     kubectl create secret generic grafana-admin -n monitoring --from-file=$dir --dry-run=client -o json |
+     [IO.File]::WriteAllText((Join-Path $dir.FullName 'admin-user'), 'admin'); [IO.File]::WriteAllText((Join-Path $dir.FullName 'admin-password'), $pw)
+     kubectl create secret generic grafana-admin -n monitoring --from-file=$($dir.FullName) --dry-run=client -o json |
        & "$env:LOCALAPPDATA\Programs\kubeseal\kubeseal.exe" --format yaml --controller-name sealed-secrets-controller --controller-namespace kube-system |
        Out-File -Encoding utf8 platform/config/monitoring/grafana-admin.sealedsecret.yaml
-   } finally { Remove-Item -Recurse -Force $dir; Remove-Variable pw }
+   } finally { Remove-Item -Recurse -Force $dir.FullName; Remove-Variable pw }
    ```
 3. Commit the sealed file in a pull request and merge. After Argo CD syncs, restart Grafana so it reads the new password: `kubectl rollout restart deployment/kube-prometheus-stack-grafana -n monitoring`.
 4. Sign in with the new password; `admin`/`admin` must fail.
