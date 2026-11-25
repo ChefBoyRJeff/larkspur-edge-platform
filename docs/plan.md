@@ -43,7 +43,7 @@ Larkspur Logistics (fictional) opens a regional warehouse. Staff need shipment t
 | Platform | Argo CD, cert-manager + internal CA, Sealed Secrets, dev/prod namespaces, RBAC, restricted pod security, default-deny network policies | A test page is served over trusted HTTPS by hostname; default-deny and restricted pod security enforced | Done |
 | Application | Larkspur Track: shipments, status workflow (received -> stored -> picked -> shipped), timeline, search, dashboard, Alembic migrations, sign-in, clerk/supervisor/admin roles, audit trail | Invalid transitions rejected; migrations apply cleanly; unit tests pass; argon2 password hashing; per-role permissions tested; every change audited | Done |
 | CI/CD | GitHub Actions, arm64 + amd64 images, Trivy, versioned GHCR images, CloudNativePG operator + dev and prod databases, Helm chart, Argo CD dev -> prod by pull request | PRs run lint + tests; merges build both architectures; promotion by PR; rollback by revert works | Done |
-| Data | Scheduled CloudNativePG backups to Azure Blob, restore | Azure cost approved first; restore to a new instance works; RPO/RTO targets met | Planned |
+| Data | Scheduled CloudNativePG backups to Azure Blob, restore | Azure cost approved first; restore to a new instance works; RPO/RTO targets met | Done: RPO 5 min / RTO 30 min targets; measured WAL in Azure in 2-5 s, restore in 71-81 s (ADR-0008) |
 | Integration | Offline-first outbox sync to Azure | With the uplink cut, staff keep working; when it returns, every event is delivered exactly once | Planned |
 | Operations | Prometheus, Grafana, Alertmanager, app metrics, blackbox page checks (instead of Uptime Kuma, ADR-0007), SLOs, runbooks, failure drills | Alerts fire and resolve; SLOs measured; runbooks cover node loss, database pod loss and a bad release | Monitoring done (alerts fire and resolve, SLOs measured); drills after Integration |
 | Release | README + diagram, install guide, ADRs, interview guide, release notes | Tagged v1.0 release | Planned |
@@ -53,14 +53,14 @@ Larkspur Logistics (fictional) opens a regional warehouse. Staff need shipment t
 ## 6. Cost
 - Edge site: $0 beyond electricity (about $4-5/month for the switch and Pis).
 - Azure (Data and Integration modules only): Blob backups + Storage Queue, estimated under $1/month; priced and approved before creation, with a budget alert.
+  - Data (approved 11-25-2026): backup storage in rg-lark-edge-backup, about $0.15/month at most at live East US prices; $5 budget `budget-larkspur-edge-backup`.
 
 ## 7. Risks and limitations
 | Risk | Mitigation |
 |---|---|
 | SD card wear (Postgres, Prometheus) | Short retention, limited writes; USB SSD as the upgrade path |
 | Single control plane | Accepted for v1; backups + Ansible allow a full rebuild |
-| Data tied to one node | Backups + tested restore |
-| Prod database has no backups until the Data module | Prod holds synthetic data only until then; scheduled backups and a tested restore are the Data module's first deliverable |
+| Data tied to one node | Continuous WAL archiving and nightly backups to Azure; restore drill passed (ADR-0008) |
 | Audit log trigger can be dropped by the app's database role (table owner) | Guards against bugs and mistakes; a separate audit role without UPDATE/DELETE rights is the upgrade path (ADR-0006) |
 | No internal DNS yet | hosts-file entries until Pi-hole (Phase 2) |
 | Switch firmware end-of-life | Admin access limited to the home network |
@@ -75,6 +75,7 @@ Larkspur Logistics (fictional) opens a regional warehouse. Staff need shipment t
 | Ansible control node | Infrastructure | WSL2 Ubuntu 26.04 on the admin PC, dedicated SSH key |
 | Sign-in, sessions, roles, audit log | Application | Local accounts, Argon2id, database sessions (ADR-0006) |
 | Client IP at the ingress | Application | Traefik DaemonSet, externalTrafficPolicy Local (ADR-0005) |
+| Backup target, credentials and recovery targets | Data | Azure Blob (Hot LRS) through the Barman Cloud plugin, per-environment SAS, RPO 5 min / RTO 30 min (ADR-0008) |
 | Alert channel and SLO targets | Operations | Email to Gmail; prod 99.5% success and 99% within 1 s over 7 days (ADR-0007) |
 | Sync target | Integration | Open (recommended: Azure Storage Queue, after pricing) |
 
