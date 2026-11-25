@@ -36,7 +36,7 @@ How a build reaches dev and prod, and how to undo it. The design is in ADR-0004;
    ```
 3. Verify the footer and `kubectl get deployment larkspur-track -n larkspur-prod -o jsonpath='{.spec.template.spec.containers[0].image}'`.
 
-**Migrations:** a revert changes only the image; it never runs a downgrade. Rolling back is safe only when the previous release works with the current schema, so migrations must be backward compatible (add first, remove in a later release). When they are not, roll forward with a fix instead.
+**Migrations:** a revert changes only the image; it never runs a downgrade. Rolling back is safe only when the previous release works with the current schema, so migrations must be backward compatible (add first, remove in a later release). When they are not, roll forward with a fix instead. Releases before `sha-e5f376a` have no sign-in: rolling back past it works with the schema but turns sign-in off (ADR-0006).
 
 **Expected:** after the merge and a refresh, a release or rollback finishes in well under a minute with no failed requests (rolling update with `maxUnavailable: 0` and a 5 s `preStop` pause). Add the time the pull request checks take.
 
