@@ -31,7 +31,7 @@ Larkspur Logistics (fictional) opens a regional warehouse. Staff need shipment t
    Traefik ingress -> larkspur-track (FastAPI, 2 replicas, non-root) -> CloudNativePG (PostgreSQL)
    outbox worker  -> (internet) -> Azure Storage Queue
    Argo CD <- GitHub (main / PRs); cert-manager; Sealed Secrets; network policies
-   Prometheus, Grafana, Alertmanager, Uptime Kuma; CloudNativePG backups -> Azure Blob
+   Prometheus, Grafana, Alertmanager, blackbox exporter; CloudNativePG backups -> Azure Blob
  GitHub Actions: test -> build arm64/amd64 -> Trivy -> GHCR (versioned) -> PR bumps chart -> Argo CD syncs
 ```
 
@@ -45,7 +45,7 @@ Larkspur Logistics (fictional) opens a regional warehouse. Staff need shipment t
 | CI/CD | GitHub Actions, arm64 + amd64 images, Trivy, versioned GHCR images, CloudNativePG operator + dev and prod databases, Helm chart, Argo CD dev -> prod by pull request | PRs run lint + tests; merges build both architectures; promotion by PR; rollback by revert works | Done |
 | Data | Scheduled CloudNativePG backups to Azure Blob, restore | Azure cost approved first; restore to a new instance works; RPO/RTO targets met | Planned |
 | Integration | Offline-first outbox sync to Azure | With the uplink cut, staff keep working; when it returns, every event is delivered exactly once | Planned |
-| Operations | Prometheus, Grafana, Alertmanager, app metrics, Uptime Kuma, SLOs, runbooks, failure drills | Alerts fire and resolve; SLOs measured; runbooks cover node loss, database pod loss and a bad release | Planned |
+| Operations | Prometheus, Grafana, Alertmanager, app metrics, blackbox page checks (instead of Uptime Kuma, ADR-0007), SLOs, runbooks, failure drills | Alerts fire and resolve; SLOs measured; runbooks cover node loss, database pod loss and a bad release | Monitoring done (alerts fire and resolve, SLOs measured); drills after Integration |
 | Release | README + diagram, install guide, ADRs, interview guide, release notes | Tagged v1.0 release | Planned |
 
 **Build order:** Foundation -> Infrastructure -> Platform -> Application (core) -> CI/CD -> Application (sign-in) -> Operations (monitoring) -> Data -> Integration -> Operations (drills) -> Release.
@@ -64,6 +64,7 @@ Larkspur Logistics (fictional) opens a regional warehouse. Staff need shipment t
 | Audit log trigger can be dropped by the app's database role (table owner) | Guards against bugs and mistakes; a separate audit role without UPDATE/DELETE rights is the upgrade path (ADR-0006) |
 | No internal DNS yet | hosts-file entries until Pi-hole (Phase 2) |
 | Switch firmware end-of-life | Admin access limited to the home network |
+| Alerts depend on the cluster: a site-wide power or network loss sends no email | Outside watchdog on a separate Pi (lark-mon01) proposed; a UPS is the hardware fix |
 | Internal root CA trusted by the admin PC (key compromise could impersonate any site) | Key stays in the cluster (cert-manager namespace); trusted for the current Windows user only; removable in certmgr.msc; name constraints considered later |
 | New pods have unrestricted network access for up to ~3 s, until kube-router programs their firewall chain (k3s sets kube-router's NetPolDefaultDeny to false and does not expose it) | Measured: blocked by t=3 s on both nodes; the API and kubelet still require authentication; only pinned, scanned images run; Cilium or Calico is the upgrade path |
 
@@ -74,7 +75,7 @@ Larkspur Logistics (fictional) opens a regional warehouse. Staff need shipment t
 | Ansible control node | Infrastructure | WSL2 Ubuntu 26.04 on the admin PC, dedicated SSH key |
 | Sign-in, sessions, roles, audit log | Application | Local accounts, Argon2id, database sessions (ADR-0006) |
 | Client IP at the ingress | Application | Traefik DaemonSet, externalTrafficPolicy Local (ADR-0005) |
-| Alert channel and SLO targets | Operations | Open |
+| Alert channel and SLO targets | Operations | Email to Gmail; prod 99.5% success and 99% within 1 s over 7 days (ADR-0007) |
 | Sync target | Integration | Open (recommended: Azure Storage Queue, after pricing) |
 
 ## 9. Working agreement

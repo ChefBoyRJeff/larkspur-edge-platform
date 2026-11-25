@@ -4,7 +4,7 @@
 
 **Larkspur Track**: an offline-first shipment tracking system for a (fictional) Larkspur Logistics regional warehouse, running on a 2-node **k3s** Kubernetes cluster of Raspberry Pi 5s, built and operated with production practices: Ansible, GitHub Actions, Argo CD (GitOps), cert-manager, Sealed Secrets, CloudNativePG, Prometheus/Grafana, and Azure for off-site backups and sync.
 
-> **Status:** Foundation, Infrastructure, Platform, CI/CD and Application done; Operations (monitoring) next. See [docs/plan.md](docs/plan.md).
+> **Status:** Foundation, Infrastructure, Platform, CI/CD, Application and Operations (monitoring) done; Data (backups) next. See [docs/plan.md](docs/plan.md).
 
 | Host | Hardware | Role |
 |---|---|---|
@@ -37,6 +37,12 @@ flowchart LR
       ss["Sealed Secrets"]
       cnpg["CloudNativePG operator"]
       traefik["Traefik ingress<br/>HTTPS only"]
+      subgraph MON["monitoring"]
+        prom["Prometheus<br/>metrics, alert rules, SLOs"]
+        am["Alertmanager"]
+        grafana["Grafana"]
+        bbx["Blackbox exporter<br/>page checks"]
+      end
       subgraph DEVNS["larkspur-dev"]
         devapp["Larkspur Track<br/>2 replicas"]
         devdb[("larkspur-db<br/>PostgreSQL 18")]
@@ -66,6 +72,15 @@ flowchart LR
   traefik -->|"track-dev.larkspur.home.arpa"| devapp
   traefik -->|"track.larkspur.home.arpa"| prodapp
   cm -.->|"TLS certificates"| traefik
+  prom -.->|"scrapes"| devapp
+  prom -.->|"scrapes"| prodapp
+  prom -.->|"scrapes"| proddb
+  bbx -->|"HTTPS, like a browser"| traefik
+  prom -->|"alerts"| am
+  am -->|"email"| gmail(["Gmail"])
+  browser -->|"grafana.larkspur.home.arpa"| traefik
+  traefik --> grafana
+  grafana -.->|"queries"| prom
 ```
 
 Both app namespaces enforce the `restricted` Pod Security profile, deny all network traffic by default (DNS excepted), and give the `larkspur-developers` group edit access in dev and read-only access in prod. Network policies admit only Traefik to the app and only the app to its database.
@@ -80,13 +95,23 @@ Releases are pull requests that change the image tag; rollbacks are reverts. See
 
 Both environments require sign-in, with clerk, supervisor and admin roles and an append-only audit log (ADR-0006). Users are managed on the Users page; see [docs/runbooks/user-administration.md](docs/runbooks/user-administration.md).
 
+## Monitoring
+Prometheus scrapes the app, both databases, cert-manager, the nodes and Kubernetes itself; the blackbox exporter checks each page over trusted HTTPS from inside the cluster. Alertmanager emails warning and critical alerts, each linking to its section in [docs/runbooks/alerts.md](docs/runbooks/alerts.md). Design: [ADR-0007](docs/adr/0007-monitoring-and-alerting.md).
+
+| SLO (prod, rolling 7 days, health checks excluded) | Target |
+|---|---|
+| Requests that succeed (no 5xx) | 99.5% |
+| Requests answered within 1 second | 99% |
+
+Dashboards: https://grafana.larkspur.home.arpa (**Larkspur Track** shows the SLOs, traffic, shipments, sign-ins and page checks). Prometheus, Alertmanager and Argo CD are reached with `kubectl port-forward` (see the runbook).
+
 ## Repository layout
 | Path | Contents |
 |---|---|
 | ansible/ | Node configuration: inventory, roles (common, k3s_server, k3s_agent), site.yml (configure), patch.yml (rolling OS updates) |
 | app/ | Larkspur Track (FastAPI, Jinja2, PostgreSQL): uv project, source in src/larkspur_track/, tests in tests/ |
-| platform/ | GitOps manifests: bootstrap/ (root app), apps/ (Argo CD Applications), argocd/ (Argo CD Helm values), config/ (CA issuers, app namespaces and guardrails, databases, Traefik settings, HTTPS test page) |
-| charts/ | Helm chart for Larkspur Track (web Deployment, migration job, Service, Ingress, Certificate, network policies) with per-environment values |
+| platform/ | GitOps manifests: bootstrap/ (root app), apps/ (Argo CD Applications), argocd/ (Argo CD Helm values), alertmanager/ (alert email template and sealing script), config/ (CA issuers, app namespaces and guardrails, databases and their monitoring, Traefik settings, monitoring rules and dashboards, HTTPS test page) |
+| charts/ | Helm chart for Larkspur Track (web Deployment, migration job, Service, Ingress, Certificate, network policies, ServiceMonitor, alert rules) with per-environment values |
 | docs/ | Plan, architecture decision records, runbooks, AI-use log |
 | .github/ | CI: pull request checks, multi-arch image builds to GHCR (amd64 + arm64), Dependabot |
 
