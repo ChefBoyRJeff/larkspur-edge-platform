@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Audit log · Larkspur Track{% endblock %}
+{% block content %}
+<h1>Audit log</h1>
+<p class="muted">The newest {{ limit }} entries. Entries can't be changed or deleted.</p>
+<form class="search" method="get" action="/audit">
+  <div>
+    <label for="action">Action</label>
+    <select id="action" name="action">
+      <option value="">All</option>
+      {% for option in actions %}
+      <option value="{{ option }}"{% if option == action %} selected{% endif %}>{{ option }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <button type="submit">Show</button>
+</form>
+{% if events %}
+<table>
+  <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Detail</th><th>From</th></tr></thead>
+  <tbody>
+  {% for event in events %}
+    <tr>
+      <td>{{ event.occurred_at | local_time }}</td>
+      <td>{{ event.actor_username or "" }}</td>
+      <td>{{ event.action }}</td>
+      <td>
+        {% if event.target_type == "shipment" and event.target_id %}<a href="/shipments/{{ event.target_id }}">{{ event.detail or "shipment" }}</a>
+        {% elif event.target_type == "user" and event.target_id and is_admin %}<a href="/admin/users/{{ event.target_id }}">{{ event.detail or "user" }}</a>
+        {% else %}{{ event.detail or "" }}{% endif %}
+      </td>
+      <td>{{ event.client_ip or "" }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No entries yet.</p>
+{% endif %}
+{% endblock %}

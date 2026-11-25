@@ -8,6 +8,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from larkspur_track.audit import AuditAction, record_by
 from larkspur_track.auth import RoleRequired, SessionDep, SignedIn, require_signed_in
 from larkspur_track.forms import clean_note, parse_shipment_form
 from larkspur_track.models import Shipment
@@ -96,6 +97,7 @@ def new_shipment(request: Request) -> HTMLResponse:
 def receive_shipment(
     request: Request,
     session: SessionDep,
+    auth: AuthDep,
     tracking_number: FormText = "",
     consignee: FormText = "",
     destination: FormText = "",
@@ -117,8 +119,18 @@ def receive_shipment(
             consignee=data.consignee,
             destination=data.destination,
             note=data.note,
+            actor_id=auth.user_id,
         )
         shipment_id = shipment.id
+        record_by(
+            session,
+            request,
+            auth,
+            AuditAction.SHIPMENT_RECEIVED,
+            target_type="shipment",
+            target_id=shipment_id,
+            detail=shipment.tracking_number,
+        )
         session.commit()
     except IntegrityError:
         session.rollback()
@@ -151,7 +163,18 @@ def advance(
     if not has_role(auth.role, role_needed_for(target_status)):
         raise RoleRequired(role_needed_for(target_status))
     try:
-        advance_shipment(session, shipment_id, target_status, note_clean)
+        event = advance_shipment(
+            session, shipment_id, target_status, note_clean, actor_id=auth.user_id
+        )
+        record_by(
+            session,
+            request,
+            auth,
+            AuditAction.SHIPMENT_ADVANCED,
+            target_type="shipment",
+            target_id=shipment_id,
+            detail=f"{event.shipment.tracking_number}: {event.from_status} → {event.to_status}",
+        )
         session.commit()
     except ShipmentNotFoundError:
         session.rollback()

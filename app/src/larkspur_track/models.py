@@ -1,4 +1,4 @@
-"""ORM models: shipments, their append-only status timeline, users and their sessions."""
+"""ORM models: shipments and their timeline, users, sessions, and the audit log."""
 
 import uuid
 from datetime import datetime
@@ -66,8 +66,12 @@ class ShipmentEvent(Base):
     occurred_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("clock_timestamp()")
     )
+    # Who made the change. Empty for events recorded before sign-in existed.
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
 
     shipment: Mapped[Shipment] = relationship(back_populates="events")
+    # Quoted because User is defined below.
+    actor: Mapped["User | None"] = relationship()  # noqa: UP037
 
 
 class User(Base):
@@ -111,3 +115,25 @@ class UserSession(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
     user: Mapped[User] = relationship()
+
+
+class AuditEvent(Base):
+    """One security-relevant action. Rows are only ever added: a database trigger rejects
+    UPDATE, DELETE and TRUNCATE on this table."""
+
+    __tablename__ = "audit_log"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("clock_timestamp()"), index=True
+    )
+    action: Mapped[str] = mapped_column(String(40), index=True)
+    # Empty when nobody was signed in, e.g. a failed sign-in with an unknown username.
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), index=True)
+    # The username at the time, or as typed for a failed sign-in.
+    actor_username: Mapped[str | None] = mapped_column(String(40))
+    target_type: Mapped[str | None] = mapped_column(String(20))
+    target_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    detail: Mapped[str | None] = mapped_column(String(500))
+    # The client's address as Traefik saw it (see ADR-0005); IPv6 needs up to 45 characters.
+    client_ip: Mapped[str | None] = mapped_column(String(45))

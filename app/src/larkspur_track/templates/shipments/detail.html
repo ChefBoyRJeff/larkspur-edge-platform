@@ -20,12 +20,13 @@
 {% endif %}
 <h2>Timeline</h2>
 <table>
-  <thead><tr><th>When</th><th>Change</th><th>Note</th></tr></thead>
+  <thead><tr><th>When</th><th>Change</th><th>By</th><th>Note</th></tr></thead>
   <tbody>
   {% for event in shipment.events %}
     <tr>
       <td>{{ event.occurred_at | local_time }}</td>
       <td>{% if event.from_status %}{{ event.from_status }} → {% endif %}{{ event.to_status }}</td>
+      <td>{{ event.actor.display_name if event.actor else "" }}</td>
       <td>{{ event.note or "" }}</td>
     </tr>
   {% endfor %}
