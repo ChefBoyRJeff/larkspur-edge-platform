@@ -1,4 +1,4 @@
 # Dev environment (namespace larkspur-dev). Promote a release by changing image.tag.
 image:
-  tag: sha-07fc083
+  tag: sha-e5f376a
 host: track-dev.larkspur.home.arpa
