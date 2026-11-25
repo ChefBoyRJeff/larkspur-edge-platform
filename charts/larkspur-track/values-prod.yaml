@@ -1,5 +1,5 @@
 # Prod environment (namespace larkspur-prod). Promote a release by changing image.tag to a tag
 # that has already run in dev.
 image:
-  tag: sha-82ac3d8
+  tag: sha-e5f376a
 host: track.larkspur.home.arpa
