@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}{{ user.username }} · Larkspur Track{% endblock %}
+{% block content %}
+<p><a href="/admin/users">&larr; All users</a></p>
+<h1>{{ user.display_name }} <span class="status">{{ user.role }}</span></h1>
+{% if done %}<p class="done" role="status">{{ done }}</p>{% endif %}
+{% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+<p>
+  <strong>Username:</strong> {{ user.username }}<br>
+  <strong>Status:</strong> {% if not user.is_active %}deactivated{% elif locked %}locked until {{ user.locked_until | local_time }}{% else %}active{% endif %}<br>
+  <strong>Password last set:</strong> {{ user.password_changed_at | local_time }}
+</p>
+
+{% if is_self %}
+<p class="muted">This is your account. Another admin must change your role or deactivate it.</p>
+{% else %}
+<section>
+  <h2>Role</h2>
+  <form class="stack" method="post" action="/admin/users/{{ user.id }}/role">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label for="role">Role</label>
+    <select id="role" name="role">
+      {% for option in roles %}
+      <option value="{{ option }}"{% if option == user.role %} selected{% endif %}>{{ option }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit">Change role</button>
+  </form>
+</section>
+
+<section>
+  <h2>Access</h2>
+  <form method="post" action="/admin/users/{{ user.id }}/active">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    {% if user.is_active %}
+    <input type="hidden" name="active" value="false">
+    <button type="submit">Deactivate and sign out everywhere</button>
+    {% else %}
+    <input type="hidden" name="active" value="true">
+    <button type="submit">Reactivate</button>
+    {% endif %}
+  </form>
+</section>
+{% endif %}
+
+{% if locked %}
+<section>
+  <h2>Lockout</h2>
+  <form method="post" action="/admin/users/{{ user.id }}/unlock">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit">Unlock now</button>
+  </form>
+</section>
+{% endif %}
+
+<section>
+  <h2>Reset password</h2>
+  <form class="stack" method="post" action="/admin/users/{{ user.id }}/password">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label for="password">New password (at least 12 characters)</label>
+    <input id="password" name="password" type="password" required minlength="12" maxlength="128"
+           autocomplete="new-password">
+    <label for="confirm">New password again</label>
+    <input id="confirm" name="confirm" type="password" required minlength="12" maxlength="128"
+           autocomplete="new-password">
+    <button type="submit">Reset password</button>
+  </form>
+</section>
+{% endblock %}

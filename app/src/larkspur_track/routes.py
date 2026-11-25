@@ -8,13 +8,19 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from larkspur_track.auth import SessionDep, require_signed_in
+from larkspur_track.auth import RoleRequired, SessionDep, SignedIn, require_signed_in
 from larkspur_track.forms import clean_note, parse_shipment_form
 from larkspur_track.models import Shipment
 from larkspur_track.queries import SEARCH_LIMIT, count_by_status, search_shipments
+from larkspur_track.roles import has_role
 from larkspur_track.services import ShipmentNotFoundError, advance_shipment, create_shipment
 from larkspur_track.templating import render
-from larkspur_track.workflow import InvalidTransitionError, ShipmentStatus, next_status
+from larkspur_track.workflow import (
+    InvalidTransitionError,
+    ShipmentStatus,
+    next_status,
+    role_needed_for,
+)
 
 OUT_OF_DATE = (
     "This shipment had already moved on, so the page was out of date. "
@@ -24,6 +30,7 @@ OUT_OF_DATE = (
 # Every shipment page needs a signed-in user; POSTs also need the CSRF token (see auth.py).
 router = APIRouter(dependencies=[Depends(require_signed_in)])
 FormText = Annotated[str, Form()]
+AuthDep = Annotated[SignedIn, Depends(require_signed_in)]
 
 
 def _detail(
@@ -37,7 +44,15 @@ def _detail(
     shipment = session.get(Shipment, shipment_id)
     if shipment is None:
         return render(request, "not_found.html", {}, 404)
-    context = {"shipment": shipment, "next_status": next_status(shipment.status), "error": error}
+    following = next_status(shipment.status)
+    auth: SignedIn = request.state.auth
+    context = {
+        "shipment": shipment,
+        "next_status": following,
+        "role_needed": role_needed_for(following) if following else None,
+        "may_advance": following is not None and has_role(auth.role, role_needed_for(following)),
+        "error": error,
+    }
     return render(request, "shipments/detail.html", context, status_code)
 
 
@@ -122,6 +137,7 @@ def advance(
     request: Request,
     shipment_id: uuid.UUID,
     session: SessionDep,
+    auth: AuthDep,
     target: FormText = "",
     note: FormText = "",
 ) -> Response:
@@ -132,6 +148,8 @@ def advance(
         target_status = ShipmentStatus(target)
     except ValueError:
         return _detail(request, session, shipment_id, error="Unknown status.", status_code=422)
+    if not has_role(auth.role, role_needed_for(target_status)):
+        raise RoleRequired(role_needed_for(target_status))
     try:
         advance_shipment(session, shipment_id, target_status, note_clean)
         session.commit()

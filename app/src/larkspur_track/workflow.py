@@ -2,6 +2,8 @@
 
 from enum import StrEnum
 
+from larkspur_track.roles import UserRole
+
 
 class ShipmentStatus(StrEnum):
     """Where a shipment is in the warehouse."""
@@ -17,6 +19,15 @@ ALLOWED_TRANSITIONS: dict[ShipmentStatus, ShipmentStatus] = {
     ShipmentStatus.STORED: ShipmentStatus.PICKED,
     ShipmentStatus.PICKED: ShipmentStatus.SHIPPED,
 }
+
+
+# Shipping hands the goods to a carrier, so it needs a supervisor. Clerks do every earlier step.
+_ROLE_NEEDED = {ShipmentStatus.SHIPPED: UserRole.SUPERVISOR}
+
+
+def role_needed_for(target: ShipmentStatus) -> UserRole:
+    """The lowest role that may move a shipment to this status."""
+    return _ROLE_NEEDED.get(target, UserRole.CLERK)
 
 
 class InvalidTransitionError(ValueError):

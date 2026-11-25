@@ -1,6 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Not found · Larkspur Track{% endblock %}
 {% block content %}
+{% if thing == "User" %}
+<h1>User not found</h1>
+<p><a href="/admin/users">Back to all users</a></p>
+{% else %}
 <h1>Shipment not found</h1>
 <p><a href="/shipments">Back to all shipments</a></p>
+{% endif %}
 {% endblock %}

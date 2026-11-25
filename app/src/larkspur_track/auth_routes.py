@@ -11,6 +11,7 @@ from larkspur_track.auth import (
     SIGN_IN_FAILED,
     CsrfRejected,
     CurrentAuth,
+    RoleRequired,
     SessionDep,
     SignedIn,
     SignInRequired,
@@ -101,4 +102,14 @@ async def refuse_change(request: Request, exc: Exception) -> HTMLResponse:
     return render(request, "forbidden.html", {}, 403)
 
 
-EXCEPTION_HANDLERS = {SignInRequired: send_to_sign_in, CsrfRejected: refuse_change}
+async def refuse_role(request: Request, exc: Exception) -> HTMLResponse:
+    """Handler for RoleRequired: say which role the page or action needs."""
+    required = exc.required if isinstance(exc, RoleRequired) else None
+    return render(request, "no_access.html", {"required": required}, 403)
+
+
+EXCEPTION_HANDLERS = {
+    SignInRequired: send_to_sign_in,
+    CsrfRejected: refuse_change,
+    RoleRequired: refuse_role,
+}

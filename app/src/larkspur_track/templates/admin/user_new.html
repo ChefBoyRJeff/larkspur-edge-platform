@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Add a user · Larkspur Track{% endblock %}
+{% block content %}
+<p><a href="/admin/users">&larr; All users</a></p>
+<h1>Add a user</h1>
+{% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+<form class="stack" method="post" action="/admin/users">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <label for="username">Username</label>
+  <input id="username" name="username" value="{{ values.username }}" required maxlength="40"
+         autocomplete="off" autocapitalize="none" spellcheck="false">
+
+  <label for="display_name">Full name</label>
+  <input id="display_name" name="display_name" value="{{ values.display_name }}" required maxlength="120">
+
+  <label for="role">Role</label>
+  <select id="role" name="role">
+    {% for option in roles %}
+    <option value="{{ option }}"{% if option == values.role %} selected{% endif %}>{{ option }}</option>
+    {% endfor %}
+  </select>
+
+  <label for="password">Password (at least 12 characters)</label>
+  <input id="password" name="password" type="password" required minlength="12" maxlength="128"
+         autocomplete="new-password">
+
+  <label for="confirm">Password again</label>
+  <input id="confirm" name="confirm" type="password" required minlength="12" maxlength="128"
+         autocomplete="new-password">
+
+  <button type="submit">Add user</button>
+</form>
+{% endblock %}
