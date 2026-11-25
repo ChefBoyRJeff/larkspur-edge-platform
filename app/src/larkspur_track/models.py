@@ -1,26 +1,32 @@
-"""ORM models: shipments and their append-only status timeline."""
+"""ORM models: shipments, their append-only status timeline, and users."""
 
 import uuid
 from datetime import datetime
+from enum import StrEnum
 
 from sqlalchemy import DateTime, Enum, ForeignKey, String, Uuid, func, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from larkspur_track.db import Base
+from larkspur_track.roles import UserRole
 from larkspur_track.workflow import ShipmentStatus
 
 
-def _status_type(name: str) -> Enum:
-    """Status stored as text with a CHECK constraint, so adding a status is a simple migration."""
+def _text_enum(enum_class: type[StrEnum], name: str) -> Enum:
+    """Stored as text with a CHECK constraint, so adding a value is a simple migration."""
     return Enum(
-        ShipmentStatus,
+        enum_class,
         name=name,
         native_enum=False,
         create_constraint=True,
         length=16,
-        values_callable=lambda statuses: [status.value for status in statuses],
+        values_callable=lambda members: [member.value for member in members],
         validate_strings=True,
     )
+
+
+def _status_type(name: str) -> Enum:
+    return _text_enum(ShipmentStatus, name)
 
 
 class Shipment(Base):
@@ -62,3 +68,26 @@ class ShipmentEvent(Base):
     )
 
     shipment: Mapped[Shipment] = relationship(back_populates="events")
+
+
+class User(Base):
+    """A person who signs in. Usernames are stored in lower case."""
+
+    __tablename__ = "users"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    username: Mapped[str] = mapped_column(String(40), unique=True)
+    display_name: Mapped[str] = mapped_column(String(120))
+    role: Mapped[UserRole] = mapped_column(_text_enum(UserRole, "role"))
+    # Argon2id hash in PHC format ($argon2id$v=19$m=...,t=...,p=...$salt$hash), never the password.
+    password_hash: Mapped[str] = mapped_column(String(255))
+    is_active: Mapped[bool] = mapped_column(default=True)
+    failed_sign_ins: Mapped[int] = mapped_column(default=0)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    password_changed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
