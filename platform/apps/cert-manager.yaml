@@ -13,6 +13,12 @@ spec:
       valuesObject:
         crds:
           enabled: true
+        # Prometheus reads certificate expiry and renewal times (alerts: platform/config/monitoring).
+        # honorLabels keeps each certificate's own namespace label instead of cert-manager's.
+        prometheus:
+          servicemonitor:
+            enabled: true
+            honorLabels: true
   destination:
     server: https://kubernetes.default.svc
     namespace: cert-manager
@@ -23,3 +29,12 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
+      # The ServiceMonitor CRD comes from kube-prometheus-stack; on a rebuilt cluster it may not
+      # exist yet. Retry instead of waiting for a new commit.
+      - SkipDryRunOnMissingResource=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
