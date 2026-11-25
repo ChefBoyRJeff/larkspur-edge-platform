@@ -32,6 +32,9 @@ metrics:
     # Needs the ServiceMonitor CRD from kube-prometheus-stack.
     enabled: true
     interval: 30s
+  # Alert rules for this environment (templates/prometheusrule.yaml; docs/runbooks/alerts.md).
+  alerts:
+    enabled: true
 
 resources:
   requests:
