@@ -1,4 +1,5 @@
-"""Shipment operations: every status change goes through the workflow and adds a timeline event.
+"""Shipment operations: every status change goes through the workflow and adds a timeline event,
+which is also queued in the outbox for Azure (larkspur_track.outbox).
 
 Functions flush but never commit; the caller (a page or a job) owns the transaction.
 """
@@ -9,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from larkspur_track.models import Shipment, ShipmentEvent
+from larkspur_track.outbox import enqueue
 from larkspur_track.workflow import ShipmentStatus, check_transition
 
 
@@ -39,6 +41,7 @@ def create_shipment(
     )
     session.add(shipment)
     session.flush()
+    enqueue(session, shipment, shipment.events[0])
     return shipment
 
 
@@ -66,4 +69,5 @@ def advance_shipment(
     shipment.events.append(event)
     shipment.status = target
     session.flush()
+    enqueue(session, shipment, event)
     return event
