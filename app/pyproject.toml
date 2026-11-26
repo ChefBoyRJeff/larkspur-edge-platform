@@ -23,6 +23,7 @@ dependencies = [
 [project.scripts]
 larkspur-track = "larkspur_track:main"
 larkspur-track-admin = "larkspur_track.admin:main"
+larkspur-track-sync = "larkspur_track.sync:main"
 
 [build-system]
 requires = ["uv_build>=0.13.0,<0.14.0"]

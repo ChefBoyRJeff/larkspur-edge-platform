@@ -2,7 +2,7 @@
 
 from functools import lru_cache
 
-from pydantic import field_validator
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # SQLAlchemy reads a URL without a driver (postgresql://) as psycopg2, which is not installed.
@@ -49,6 +49,26 @@ class MetricsSettings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     # Port for Prometheus metrics; 0 turns the metrics server off (the default for local runs).
+    metrics_port: int = 0
+
+
+class SyncSettings(BaseSettings):
+    """Settings for the sync worker (larkspur-track-sync); the web app never reads them."""
+
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    # The environment's queue, e.g. https://<account>.queue.core.windows.net/larkspur-events-dev,
+    # and a SAS token that may only add messages to it (azure/integration/new-sync-credential.ps1).
+    azure_queue_url: str
+    azure_queue_sas: SecretStr
+    # Sent with every event so the receiver knows which site and environment it came from.
+    sync_site: str = "local"
+    # Pause between rounds when the outbox is empty, and the longest pause after failures.
+    sync_interval_seconds: float = 5
+    sync_max_backoff_seconds: float = 300
+    sync_request_timeout_seconds: float = 10
+    # A runaway loop can't send more than this, which caps the queue's cost.
+    sync_max_sends_per_minute: int = 600
     metrics_port: int = 0
 
 
