@@ -64,7 +64,7 @@ if ($read.StatusCode -ne 403) { throw "the SAS token can read its queue (HTTP $(
 "read own queue: HTTP 403 (refused, as required)"
 $cross = Invoke-Sas Post "$other/messages" 'messagettl=1' $message
 if ($cross.StatusCode -ne 403) { throw "the SAS token can add to $other (HTTP $($cross.StatusCode)); nothing sealed" }
-"add to $other: HTTP 403 (refused, as required)"
+"add to ${other}: HTTP 403 (refused, as required)"
 
 $dir = New-Item -ItemType Directory (Join-Path ([IO.Path]::GetTempPath()) ([guid]::NewGuid()))
 try {
