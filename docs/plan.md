@@ -44,8 +44,8 @@ Larkspur Logistics (fictional) opens a regional warehouse. Staff need shipment t
 | Application | Larkspur Track: shipments, status workflow (received -> stored -> picked -> shipped), timeline, search, dashboard, Alembic migrations, sign-in, clerk/supervisor/admin roles, audit trail | Invalid transitions rejected; migrations apply cleanly; unit tests pass; argon2 password hashing; per-role permissions tested; every change audited | Done |
 | CI/CD | GitHub Actions, arm64 + amd64 images, Trivy, versioned GHCR images, CloudNativePG operator + dev and prod databases, Helm chart, Argo CD dev -> prod by pull request | PRs run lint + tests; merges build both architectures; promotion by PR; rollback by revert works | Done |
 | Data | Scheduled CloudNativePG backups to Azure Blob, restore | Azure cost approved first; restore to a new instance works; RPO/RTO targets met | Done: RPO 5 min / RTO 30 min targets; measured WAL in Azure in 2-5 s, restore in 71-81 s (ADR-0008) |
-| Integration | Offline-first outbox sync to Azure | With the uplink cut, staff keep working; when it returns, every event is delivered exactly once | Planned |
-| Operations | Prometheus, Grafana, Alertmanager, app metrics, blackbox page checks (instead of Uptime Kuma, ADR-0007), SLOs, runbooks, failure drills | Alerts fire and resolve; SLOs measured; runbooks cover node loss, database pod loss and a bad release | Monitoring done (alerts fire and resolve, SLOs measured); drills after Integration |
+| Integration | Offline-first outbox sync to Azure | With the uplink cut, staff keep working; when it returns, every event is delivered exactly once | Done: at-least-once delivery deduplicated by event_id (effectively once); uplink-cut drill kept and delivered 7 of 7 events, 5 s after the link returned, 0 duplicates (ADR-0009) |
+| Operations | Prometheus, Grafana, Alertmanager, app metrics, blackbox page checks (instead of Uptime Kuma, ADR-0007), SLOs, runbooks, failure drills | Alerts fire and resolve; SLOs measured; runbooks cover node loss, database pod loss and a bad release | Monitoring done (alerts fire and resolve, SLOs measured); drills next |
 | Release | README + diagram, install guide, ADRs, interview guide, release notes | Tagged v1.0 release | Planned |
 
 **Build order:** Foundation -> Infrastructure -> Platform -> Application (core) -> CI/CD -> Application (sign-in) -> Operations (monitoring) -> Data -> Integration -> Operations (drills) -> Release.
@@ -54,6 +54,7 @@ Larkspur Logistics (fictional) opens a regional warehouse. Staff need shipment t
 - Edge site: $0 beyond electricity (about $4-5/month for the switch and Pis).
 - Azure (Data and Integration modules only): Blob backups + Storage Queue, estimated under $1/month; priced and approved before creation, with a budget alert.
   - Data (approved 11-25-2026): backup storage in rg-lark-edge-backup, about $0.15/month at most at live East US prices; $5 budget `budget-larkspur-edge-backup`.
+  - Integration (approved 11-25-2026): sync queues in rg-lark-edge-integration, well under $0.05/month at live East US prices; $5 budget `budget-larkspur-edge-integration`.
 
 ## 7. Risks and limitations
 | Risk | Mitigation |
@@ -62,6 +63,7 @@ Larkspur Logistics (fictional) opens a regional warehouse. Staff need shipment t
 | Single control plane | Accepted for v1; backups + Ansible allow a full rebuild |
 | Data tied to one node | Continuous WAL archiving and nightly backups to Azure; restore drill passed (ADR-0008) |
 | Audit log trigger can be dropped by the app's database role (table owner) | Guards against bugs and mistakes; a separate audit role without UPDATE/DELETE rights is the upgrade path (ADR-0006) |
+| Sync has no receiver yet; queued messages wait in Azure | Messages never expire; an Azure Function or Logic App reads them in Phase 2 and dedupes by event_id (ADR-0009) |
 | No internal DNS yet | hosts-file entries until Pi-hole (Phase 2) |
 | Switch firmware end-of-life | Admin access limited to the home network |
 | Alerts depend on the cluster: a site-wide power or network loss sends no email | Outside watchdog on a separate Pi (lark-mon01) proposed; a UPS is the hardware fix |
@@ -77,7 +79,7 @@ Larkspur Logistics (fictional) opens a regional warehouse. Staff need shipment t
 | Client IP at the ingress | Application | Traefik DaemonSet, externalTrafficPolicy Local (ADR-0005) |
 | Backup target, credentials and recovery targets | Data | Azure Blob (Hot LRS) through the Barman Cloud plugin, per-environment SAS, RPO 5 min / RTO 30 min (ADR-0008) |
 | Alert channel and SLO targets | Operations | Email to Gmail; prod 99.5% success and 99% within 1 s over 7 days (ADR-0007) |
-| Sync target | Integration | Open (recommended: Azure Storage Queue, after pricing) |
+| Sync target, delivery guarantee and credentials | Integration | Transactional outbox and one sync worker per environment; Azure Storage Queue (one per environment, messages never expire); at-least-once, deduplicated by event_id; send-only SAS per queue (ADR-0009) |
 
 ## 9. Working agreement
 - Conventional Commits (feat, fix, docs, chore, ci, test, refactor) with the module as scope; one logical change per commit; PR titles in the same style.
