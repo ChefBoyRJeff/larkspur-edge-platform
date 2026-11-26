@@ -67,4 +67,39 @@ spec:
             summary: Many failed sign-ins to Larkspur Track in {{ $ns }}
             description: More than 20 sign-ins have failed in 15 minutes; check the audit log.
             runbook: docs/runbooks/alerts.md#larkspurtrackmanyfailedsignins
+        {{- if .Values.sync.enabled }}
+        - alert: LarkspurSyncWorkerDown
+          expr: absent(up{namespace="{{ $ns }}", pod=~"larkspur-track-sync-.*"} == 1)
+          for: 5m
+          labels:
+            severity: warning
+            namespace: {{ $ns }}
+          annotations:
+            summary: The Larkspur Track sync worker in {{ $ns }} is down
+            description: Prometheus has not reached the sync worker for 5 minutes; events wait in the outbox.
+            runbook: docs/runbooks/alerts.md#larkspursyncworkerdown
+        - alert: LarkspurSyncBacklog
+          # Events wait in the outbox while the internet or Azure is unreachable; nothing is lost,
+          # but Azure is behind.
+          expr: max(larkspur_outbox_oldest_pending_seconds{namespace="{{ $ns }}"}) > 1800
+          for: 5m
+          labels:
+            severity: warning
+            namespace: {{ $ns }}
+          annotations:
+            summary: Shipment events from {{ $ns }} have not reached Azure for 30 minutes
+            description: The oldest unsent outbox event is more than 30 minutes old.
+            runbook: docs/runbooks/alerts.md#larkspursyncbacklog
+        - alert: LarkspurSyncStalled
+          # Rounds run at least every 5 minutes, even while sends fail.
+          expr: time() - max(larkspur_sync_last_round_timestamp_seconds{namespace="{{ $ns }}"}) > 900
+          for: 5m
+          labels:
+            severity: warning
+            namespace: {{ $ns }}
+          annotations:
+            summary: The Larkspur Track sync worker in {{ $ns }} is stuck
+            description: The sync worker has not completed a round for 15 minutes.
+            runbook: docs/runbooks/alerts.md#larkspursyncstalled
+        {{- end }}
 {{- end }}

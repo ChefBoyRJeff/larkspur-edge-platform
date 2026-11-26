@@ -1,0 +1,77 @@
+{{- if .Values.sync.enabled }}
+# Sync worker: sends outbox events to Azure Queue Storage (ADR-0009). One replica; Recreate,
+# so two workers never overlap (they would still be safe: rows are locked with SKIP LOCKED).
+# Wave 1: after the network policies (wave -1) and the migration job (wave 0).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: larkspur-track-sync
+  labels:
+    {{- include "larkspur-track.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sync
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "larkspur-track.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: sync
+  template:
+    metadata:
+      labels:
+        {{- include "larkspur-track.labels" . | nindent 8 }}
+        app.kubernetes.io/component: sync
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        {{- include "larkspur-track.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: sync
+          image: {{ include "larkspur-track.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["larkspur-track-sync"]
+          env:
+            {{- include "larkspur-track.databaseEnv" . | nindent 12 }}
+            - name: AZURE_QUEUE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.sync.credentialsSecret }}
+                  key: AZURE_QUEUE_URL
+            - name: AZURE_QUEUE_SAS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.sync.credentialsSecret }}
+                  key: AZURE_QUEUE_SAS
+            # Tells the receiver which site and environment each event came from.
+            - name: SYNC_SITE
+              value: {{ .Release.Namespace | quote }}
+            - name: SYNC_INTERVAL_SECONDS
+              value: {{ .Values.sync.intervalSeconds | quote }}
+            - name: SYNC_MAX_BACKOFF_SECONDS
+              value: {{ .Values.sync.maxBackoffSeconds | quote }}
+            - name: SYNC_MAX_SENDS_PER_MINUTE
+              value: {{ .Values.sync.maxSendsPerMinute | quote }}
+            - name: METRICS_PORT
+              value: {{ .Values.sync.metricsPort | quote }}
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.sync.metricsPort }}
+          # Alive while the process serves its metrics; an Azure outage never restarts it.
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- include "larkspur-track.resources" .Values.sync.resources | nindent 12 }}
+          securityContext:
+            {{- include "larkspur-track.containerSecurityContext" . | nindent 12 }}
+{{- end }}

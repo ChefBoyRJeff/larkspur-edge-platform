@@ -1,0 +1,60 @@
+{{- if .Values.sync.enabled }}
+# Wave -1, like the other policies. The sync worker may reach Azure over HTTPS (any public
+# address on 443; nothing private) and PostgreSQL (allow-larkspur-track-to-database covers
+# every larkspur-track pod); only Prometheus may reach its metrics port.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-larkspur-track-sync-to-azure
+  labels:
+    {{- include "larkspur-track.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "larkspur-track.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: sync
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 100.64.0.0/10
+              - 169.254.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prometheus-to-larkspur-track-sync-metrics
+  labels:
+    {{- include "larkspur-track.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "larkspur-track.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: sync
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: {{ .Values.sync.metricsPort }}
+{{- end }}

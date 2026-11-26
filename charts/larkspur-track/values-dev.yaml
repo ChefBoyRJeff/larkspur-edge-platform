@@ -2,3 +2,6 @@
 image:
   tag: sha-aa10d99
 host: track-dev.larkspur.home.arpa
+# Sends outbox events to Azure (needs larkspur-track-sync-credentials in the namespace).
+sync:
+  enabled: true

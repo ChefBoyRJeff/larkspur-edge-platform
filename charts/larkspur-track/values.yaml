@@ -43,6 +43,24 @@ resources:
   limits:
     memory: 256Mi
 
+sync:
+  # The sync worker (larkspur-track-sync) sends outbox events to Azure Queue Storage (ADR-0009).
+  # Needs the SealedSecret larkspur-track-sync-credentials with AZURE_QUEUE_URL and
+  # AZURE_QUEUE_SAS (azure/integration/new-sync-credential.ps1), and an image with the worker.
+  enabled: false
+  credentialsSecret: larkspur-track-sync-credentials
+  metricsPort: 9103
+  intervalSeconds: 5
+  maxBackoffSeconds: 300
+  # Caps a runaway loop, and so the queue's cost.
+  maxSendsPerMinute: 600
+  resources:
+    requests:
+      cpu: 10m
+      memory: 64Mi
+    limits:
+      memory: 128Mi
+
 migration:
   # Seconds before a stuck migration is stopped; the sync then fails and nothing is rolled out.
   activeDeadlineSeconds: 300
