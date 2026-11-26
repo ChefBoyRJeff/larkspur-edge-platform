@@ -1,10 +1,22 @@
-"""ORM models: shipments and their timeline, users, sessions, and the audit log."""
+"""ORM models: shipments and their timeline, users, sessions, the audit log, and the sync outbox."""
 
 import uuid
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, Uuid, func, text
+from sqlalchemy import (
+    BigInteger,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Identity,
+    Index,
+    String,
+    Uuid,
+    func,
+    text,
+)
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from larkspur_track.db import Base
@@ -137,3 +149,30 @@ class AuditEvent(Base):
     detail: Mapped[str | None] = mapped_column(String(500))
     # The client's address as Traefik saw it (see ADR-0005); IPv6 needs up to 45 characters.
     client_ip: Mapped[str | None] = mapped_column(String(45))
+
+
+class OutboxEvent(Base):
+    """A shipment change waiting to be sent to Azure (Integration module, ADR-0009).
+
+    Written in the same transaction as the change, so a change and its event are saved together
+    or not at all. The sync worker sends unsent rows in id order and stamps sent_at. Delivery is
+    at least once: event_id (the shipment event's id) lets the receiver drop duplicates.
+    """
+
+    __tablename__ = "outbox"
+    __table_args__ = (
+        # The worker only ever looks for unsent rows, oldest first.
+        Index("ix_outbox_unsent", "id", postgresql_where=text("sent_at IS NULL")),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    event_id: Mapped[uuid.UUID] = mapped_column(Uuid, unique=True)
+    event_type: Mapped[str] = mapped_column(String(40))
+    payload: Mapped[dict] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("clock_timestamp()")
+    )
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    attempts: Mapped[int] = mapped_column(default=0)
+    # The last send error, without credentials; cleared when the event is sent.
+    last_error: Mapped[str | None] = mapped_column(String(300))
