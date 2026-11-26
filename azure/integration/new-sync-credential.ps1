@@ -51,12 +51,20 @@ function Invoke-Sas([string]$Method, [string]$Path, [string]$Query, [string]$Bod
     catch { throw "request $Method /$Path failed: $($_.Exception.Message.Replace($sas, '<sas>'))" }
 }
 $message = '<QueueMessage><MessageText>Y3JlZGVudGlhbCBjaGVjaw==</MessageText></QueueMessage>'
-$add = Invoke-Sas Post "$queue/messages" 'messagettl=1' $message
-if ($add.StatusCode -ne 201) { throw "the SAS token cannot add to its queue (HTTP $($add.StatusCode)); nothing sealed" }
+# A new stored access policy can take up to 30 seconds to take effect, so retry for a minute.
+for ($try = 1; $try -le 7; $try++) {
+    $add = Invoke-Sas Post "$queue/messages" 'messagettl=1' $message
+    if ($add.StatusCode -ne 403) { break }
+    Start-Sleep -Seconds 10
+}
+if ($add.StatusCode -ne 201) { throw "the SAS token cannot add to its queue (HTTP $($add.StatusCode) after $try tries); nothing sealed" }
+"add to own queue: HTTP 201 (try $try)"
 $read = Invoke-Sas Get "$queue/messages" 'peekonly=true'
 if ($read.StatusCode -ne 403) { throw "the SAS token can read its queue (HTTP $($read.StatusCode)); it must be send-only; nothing sealed" }
+"read own queue: HTTP 403 (refused, as required)"
 $cross = Invoke-Sas Post "$other/messages" 'messagettl=1' $message
 if ($cross.StatusCode -ne 403) { throw "the SAS token can add to $other (HTTP $($cross.StatusCode)); nothing sealed" }
+"add to $other: HTTP 403 (refused, as required)"
 
 $dir = New-Item -ItemType Directory (Join-Path ([IO.Path]::GetTempPath()) ([guid]::NewGuid()))
 try {
