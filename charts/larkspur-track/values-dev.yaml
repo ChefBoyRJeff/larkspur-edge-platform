@@ -1,4 +1,7 @@
 # Dev environment (namespace larkspur-dev). Promote a release by changing image.tag.
 image:
-  tag: sha-aa10d99
+  tag: sha-8b59929
 host: track-dev.larkspur.home.arpa
+# Sends outbox events to Azure (needs larkspur-track-sync-credentials in the namespace).
+sync:
+  enabled: true

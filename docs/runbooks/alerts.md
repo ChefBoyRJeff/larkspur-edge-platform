@@ -80,6 +80,32 @@ Node load: Grafana **Node Exporter / Nodes**; database connections: `LarkspurDat
 **Meaning:** as above, for the latency SLO: too many requests take over 1 second (budget 1% of requests).
 **Check and fix:** as for `LarkspurTrackSlow`.
 
+## Sync to Azure
+The sync worker (`larkspur-track-sync`, one per environment) sends every shipment change from the outbox to the environment's Azure queue (Integration module, ADR-0009). When the internet or Azure is unreachable, events wait in the outbox, in order, and nothing is lost. Procedures: `docs/runbooks/sync.md`.
+
+### LarkspurSyncWorkerDown
+**Meaning:** Prometheus has not reached the sync worker for 5 minutes. Events keep queueing in the outbox, and are sent when it is back.
+**Check:**
+```powershell
+kubectl get pods -n larkspur-prod -l app.kubernetes.io/component=sync
+kubectl logs -n larkspur-prod deploy/larkspur-track-sync --tail=50
+```
+**Fix:** CrashLoopBackOff with a settings error → the `larkspur-track-sync-credentials` secret is missing or incomplete (`kubectl get secret -n larkspur-prod larkspur-track-sync-credentials`). After a release → roll back.
+
+### LarkspurSyncBacklog
+**Meaning:** the oldest unsent event is more than 30 minutes old: Azure has not received this site's changes for half an hour. Expected during an internet outage; nothing is lost.
+**Check:** the worker's log says why sending paused (it never prints the token):
+```powershell
+kubectl logs -n larkspur-prod deploy/larkspur-track-sync --tail=20
+```
+`HTTP 403` → the credential expired or was revoked; `URLError`/timeouts → no internet or Azure is down.
+**Fix:** credential → `docs/runbooks/sync.md`, "Rotate the credential". Network → once it returns, the worker catches up by itself (up to 600 events a minute); the alert clears when the backlog is under 30 minutes old.
+
+### LarkspurSyncStalled
+**Meaning:** the worker is running but has not finished a round for 15 minutes; it may be stuck on the database or a hung request.
+**Check:** its log and the database alerts.
+**Fix:** `kubectl rollout restart deployment/larkspur-track-sync -n larkspur-prod`. Unsent events stay in the outbox and are sent after the restart.
+
 ## Database
 
 ### LarkspurDatabaseDown

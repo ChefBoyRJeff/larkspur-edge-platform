@@ -1,0 +1,18 @@
+{{- if and .Values.sync.enabled .Values.metrics.serviceMonitor.enabled }}
+# Tells Prometheus to scrape the sync worker (it has no Service).
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: larkspur-track-sync
+  labels:
+    {{- include "larkspur-track.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "larkspur-track.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: sync
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+      interval: {{ .Values.metrics.serviceMonitor.interval }}
+{{- end }}
