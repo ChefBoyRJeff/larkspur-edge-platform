@@ -4,7 +4,7 @@
 
 **Larkspur Track**: an offline-first shipment tracking system for a (fictional) Larkspur Logistics regional warehouse, running on a 2-node **k3s** Kubernetes cluster of Raspberry Pi 5s, built and operated with production practices: Ansible, GitHub Actions, Argo CD (GitOps), cert-manager, Sealed Secrets, CloudNativePG, Prometheus/Grafana, and Azure for off-site backups and sync.
 
-> **Status:** Foundation, Infrastructure, Platform, CI/CD, Application, Operations (monitoring) and Data (backups) done; Integration (offline-first sync) next. See [docs/plan.md](docs/plan.md).
+> **Status:** Foundation, Infrastructure, Platform, CI/CD, Application, Operations (monitoring), Data (backups) and Integration (offline-first sync) done; Operations drills next. See [docs/plan.md](docs/plan.md).
 
 | Host | Hardware | Role |
 |---|---|---|
@@ -24,6 +24,7 @@ flowchart LR
 
   gh[("GitHub<br/>larkspur-edge-platform")]
   blob[("Azure Blob Storage<br/>rg-lark-edge-backup")]
+  queue[("Azure Storage Queue<br/>rg-lark-edge-integration")]
   actions["GitHub Actions<br/>tests, chart checks,<br/>amd64 + arm64 images, Trivy"]
   ghcr[("GHCR<br/>larkspur-track:sha-commit")]
 
@@ -46,11 +47,13 @@ flowchart LR
       end
       subgraph DEVNS["larkspur-dev"]
         devapp["Larkspur Track<br/>2 replicas"]
-        devdb[("larkspur-db<br/>PostgreSQL 18")]
+        devsync["Sync worker"]
+        devdb[("larkspur-db<br/>PostgreSQL 18<br/>+ outbox")]
       end
       subgraph PRODNS["larkspur-prod"]
         prodapp["Larkspur Track<br/>2 replicas"]
-        proddb[("larkspur-db<br/>PostgreSQL 18")]
+        prodsync["Sync worker"]
+        proddb[("larkspur-db<br/>PostgreSQL 18<br/>+ outbox")]
       end
     end
   end
@@ -69,6 +72,10 @@ flowchart LR
   proddb -->|"WAL + nightly backups"| blob
   devapp --> devdb
   prodapp --> proddb
+  devsync -->|"reads outbox"| devdb
+  prodsync -->|"reads outbox"| proddb
+  devsync -->|"HTTPS, send-only SAS"| queue
+  prodsync -->|"HTTPS, send-only SAS"| queue
   wsl -->|"SSH: site.yml, patch.yml"| n1
   wsl -->|"SSH"| n2
   browser -->|"HTTPS"| traefik
@@ -101,6 +108,9 @@ Both environments require sign-in, with clerk, supervisor and admin roles and an
 ## Backups
 Each database archives every change (WAL) to its own private container in Azure Blob Storage and takes a full backup every night, kept 30 days, through CloudNativePG's Barman Cloud plugin. Targets: lose at most 5 minutes of data (RPO) and be back within 30 minutes (RTO); measured in a restore drill: changes reached Azure within 2-5 seconds and a database was rebuilt from Azure in 71-81 seconds. Design: [ADR-0008](docs/adr/0008-database-backups.md); procedures and the drill: [docs/runbooks/backups.md](docs/runbooks/backups.md). The Azure side is Bicep in `azure/backup/`.
 
+## Sync to Azure (offline-first)
+Every shipment change is saved together with an event in an outbox table, in the same transaction. A sync worker in each environment sends the events, oldest first, to that environment's Azure Storage Queue with a token that can only add messages; when the internet is down, events wait in the outbox and staff keep working. Delivery is at least once, so receivers dedupe by `event_id`. Measured in an uplink-cut drill: 7 of 7 events made during an outage (with a worker restart) reached Azure 5 seconds after the link returned, with no duplicates. Design: [ADR-0009](docs/adr/0009-offline-first-sync.md); procedures and the drill: [docs/runbooks/sync.md](docs/runbooks/sync.md). The Azure side is Bicep in `azure/integration/`.
+
 ## Monitoring
 Prometheus scrapes the app, both databases, cert-manager, the nodes and Kubernetes itself; the blackbox exporter checks each page over trusted HTTPS from inside the cluster. Alertmanager emails warning and critical alerts, each linking to its section in [docs/runbooks/alerts.md](docs/runbooks/alerts.md). Design: [ADR-0007](docs/adr/0007-monitoring-and-alerting.md).
 
@@ -115,10 +125,10 @@ Dashboards: https://grafana.larkspur.home.arpa (**Larkspur Track** shows the SLO
 | Path | Contents |
 |---|---|
 | ansible/ | Node configuration: inventory, roles (common, k3s_server, k3s_agent), site.yml (configure), patch.yml (rolling OS updates) |
-| app/ | Larkspur Track (FastAPI, Jinja2, PostgreSQL): uv project, source in src/larkspur_track/, tests in tests/ |
-| platform/ | GitOps manifests: bootstrap/ (root app), apps/ (Argo CD Applications), drills/ (restore drill, not synced), argocd/ (Argo CD Helm values), alertmanager/ (alert email template and sealing script), config/ (CA issuers, app namespaces and guardrails, databases and their monitoring, Traefik settings, monitoring rules and dashboards, HTTPS test page) |
-| charts/ | Helm chart for Larkspur Track (web Deployment, migration job, Service, Ingress, Certificate, network policies, ServiceMonitor, alert rules) with per-environment values |
-| azure/ | Bicep and scripts for the Azure side: backup storage, budget, per-environment backup credentials |
+| app/ | Larkspur Track (FastAPI, Jinja2, PostgreSQL) and its sync worker: uv project, source in src/larkspur_track/, tests in tests/ |
+| platform/ | GitOps manifests: bootstrap/ (root app), apps/ (Argo CD Applications), drills/ (restore and uplink-cut drills, not synced), argocd/ (Argo CD Helm values), alertmanager/ (alert email template and sealing script), config/ (CA issuers, app namespaces and guardrails, databases and their monitoring, sealed sync credentials, Traefik settings, monitoring rules and dashboards, HTTPS test page) |
+| charts/ | Helm chart for Larkspur Track (web Deployment, sync worker, migration job, Service, Ingress, Certificate, network policies, ServiceMonitor and PodMonitor, alert rules) with per-environment values |
+| azure/ | Bicep and scripts for the Azure side: backup storage and sync queues, budgets, per-environment backup and sync credentials |
 | docs/ | Plan, architecture decision records, runbooks, AI-use log |
 | .github/ | CI: pull request checks, multi-arch image builds to GHCR (amd64 + arm64), Dependabot |
 
