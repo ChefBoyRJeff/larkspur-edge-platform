@@ -33,6 +33,9 @@ $countsSql = "select string_agg(t || '=' || n, ' ' order by t) from (select 'aud
 # 1. Source: row counts and a marker row whose WAL must reach Azure before the restore starts.
 $source = Get-Primary 'larkspur-db'
 $image = kubectl get cluster larkspur-db -n $ns -o jsonpath='{.spec.imageName}'
+# The path the running cluster archives to (larkspur-db, or larkspur-db-r<n> after a rebuild).
+$serverName = kubectl get cluster larkspur-db -n $ns -o jsonpath='{.spec.plugins[0].parameters.serverName}'
+if (-not $serverName) { $serverName = 'larkspur-db' }
 $sourceCounts = Invoke-Sql $source $countsSql
 Invoke-Sql $source 'create table if not exists restore_drill_marker (taken_at timestamptz not null)' | Out-Null
 $marker = Invoke-Sql $source 'insert into restore_drill_marker values (clock_timestamp()) returning taken_at'
@@ -43,7 +46,7 @@ do {
     $archived = Invoke-Sql $source "select coalesce(last_archived_wal, '') from pg_stat_archiver" 'postgres'
 } until ($archived -ge $wal -or ((Get-Date) - $t0).TotalSeconds -gt 300)
 if ($archived -lt $wal) { throw "WAL $wal did not reach Azure within 5 minutes; check LarkspurWalArchivingFailing" }
-"source $source ($Environment): $sourceCounts"
+"source $source ($Environment, archive $serverName): $sourceCounts"
 "marker $marker written; its WAL $wal reached Azure in $([int]((Get-Date) - $t0).TotalSeconds) s"
 
 $ok = $false
@@ -112,7 +115,7 @@ spec:
         name: barman-cloud.cloudnative-pg.io
         parameters:
           barmanObjectName: larkspur-db-backup
-          serverName: larkspur-db
+          serverName: $serverName
   storage:
     storageClass: local-path
     size: 2Gi
