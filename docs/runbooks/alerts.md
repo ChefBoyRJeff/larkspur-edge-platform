@@ -129,9 +129,21 @@ kubectl logs -n larkspur-prod larkspur-db-1 --tail=50
 ```
 **Fix:**
 - A `cnpg.io/hibernation: on` annotation (left from a drill) → `kubectl annotate cluster larkspur-db -n larkspur-prod --overwrite cnpg.io/hibernation=off`.
-- The pod is Pending → its node is down; the data lives on that node (local-path), so the database returns when the node does (`docs/runbooks/replace-a-node.md` if it cannot).
+- The pod is Pending → its node is down; the data lives on that node (local-path), so the database returns when the node does (`docs/runbooks/replace-a-node.md` if it cannot). With two instances (dev since Phase 2), the operator promotes the replica first, so this alert means both are down.
 - The database is up but the alert fires → check `allow-prometheus-to-larkspur-db-metrics` (`kubectl get networkpolicy -n larkspur-prod`).
 
+
+### LarkspurDatabaseReplicaMissing
+**Meaning:** fewer than two PostgreSQL instances have reported up for 10 minutes. The database still works on one instance, but losing that node would stop it.
+**Check:**
+```powershell
+kubectl get cluster larkspur-db -n larkspur-dev
+kubectl get pods -n larkspur-dev -l cnpg.io/cluster=larkspur-db -o wide
+```
+**Fix:**
+- An instance is Pending because its node is down → it returns with the node; the operator has already promoted the other one if it was the primary.
+- A new replica never becomes ready → check `allow-larkspur-db-replication` (`kubectl get networkpolicy -n larkspur-dev`) and the replica's join job logs (`kubectl logs -n larkspur-dev -l cnpg.io/jobRole=join`).
+- A node is gone for good → its instance's volume is gone too; delete that instance's PVC and pod and the operator builds a new replica (`docs/runbooks/replace-a-node.md`).
 ### LarkspurDatabaseNearConnectionLimit
 **Meaning:** over 80% of `max_connections` (100) have been in use for 5 minutes. New connections will soon be refused.
 **Check:** who holds them:

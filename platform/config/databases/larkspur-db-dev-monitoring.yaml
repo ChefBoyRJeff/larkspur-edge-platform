@@ -42,6 +42,18 @@ spec:
             summary: The larkspur-dev database is down
             description: PostgreSQL has not reported up for 2 minutes.
             runbook: docs/runbooks/alerts.md#larkspurdatabasedown
+        - alert: LarkspurDatabaseReplicaMissing
+          # Fewer than two instances report PostgreSQL up: the database still works, but it no
+          # longer survives losing its node.
+          expr: count(cnpg_collector_up{namespace="larkspur-dev"} == 1) < 2
+          for: 10m
+          labels:
+            severity: warning
+            namespace: larkspur-dev
+          annotations:
+            summary: The larkspur-dev database is running without a replica
+            description: Fewer than two PostgreSQL instances have reported up for 10 minutes.
+            runbook: docs/runbooks/alerts.md#larkspurdatabasereplicamissing
         - alert: LarkspurDatabaseNearConnectionLimit
           expr: |
             sum(cnpg_backends_total{namespace="larkspur-dev"})
