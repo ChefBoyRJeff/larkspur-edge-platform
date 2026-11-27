@@ -236,19 +236,31 @@ kubectl get nodes
 **Fix:** the exporter waiting for its CA file → `kubectl get certificate blackbox-exporter-ca -n monitoring`. After adding or removing a page check, update the count of 3 in `platform/config/monitoring/blackbox-rules.yaml`.
 
 ## Alerts from the chart's default rules
-kube-prometheus-stack also brings general rules (for example `KubePodCrashLooping`, `NodeFilesystemSpaceFillingUp`, `TargetDown`). Their emails link to the upstream runbooks at https://runbooks.prometheus-operator.dev. `Watchdog` always fires on purpose, to prove alerting works, and is never emailed.
+kube-prometheus-stack also brings general rules (for example `KubePodCrashLooping`, `NodeFilesystemSpaceFillingUp`, `TargetDown`). Their emails link to the upstream runbooks at https://runbooks.prometheus-operator.dev. `Watchdog` always fires on purpose, to prove alerting works. It is never emailed; it feeds the dead man's switch below.
+
+## Dead man's switch (healthchecks.io)
+Alertmanager sends the `Watchdog` alert to a healthchecks.io check (free Hobbyist plan) every minute. If the pings stop, healthchecks.io emails the alert address. That covers what in-cluster alerting cannot report about itself: Prometheus down (it runs once, on one node), Alertmanager down, or the whole site without power or internet. In the lark-k3s-01 node-loss drill on 11-27, an 11-minute outage of both sites sent no email because Prometheus was on the lost node.
+
+Expect the email about 5 to 8 minutes after alerting stops: Alertmanager keeps `Watchdog` for about 4 minutes after Prometheus last sends it, then healthchecks.io waits for the check's period and grace time.
+
+**Email from healthchecks.io saying "Larkspur alert pipeline" is down:** the cluster cannot alert. Check from the admin PC:
+- `kubectl get nodes` and `kubectl get pods -n monitoring -o wide`: a lost node, or Prometheus or Alertmanager not running.
+- If kubectl cannot reach the API, check the Pis' power and network first.
+healthchecks.io emails again when pings resume.
+
+**Set up or replace the check:** at healthchecks.io, add a check named "Larkspur alert pipeline", Period 1 minute, Grace time 3 minutes, email integration to the alert address. Copy its ping URL (`https://hc-ping.com/<uuid>`), then reseal the configuration (next section). Keep the URL out of Git: anyone with it can send pings and hide an outage.
 
 ---
 
 ## Change the alert email settings
-The Alertmanager configuration holds the Gmail address and an app password, so it is sealed. Needed when the address or app password changes.
+The Alertmanager configuration holds the Gmail address, an app password and the healthchecks.io ping URL, so it is sealed. Needed when any of them changes.
 1. In the Google account, with 2-step verification on: **Security → App passwords** → create one named "Larkspur alerts". Save it in Bitwarden.
-2. Optional: change routing or receivers in `platform/alertmanager/alertmanager.yaml.tmpl`, keeping the `@@GMAIL_ADDRESS@@` and `@@GMAIL_APP_PASSWORD@@` placeholders.
+2. Optional: change routing or receivers in `platform/alertmanager/alertmanager.yaml.tmpl`, keeping the `@@GMAIL_ADDRESS@@`, `@@GMAIL_APP_PASSWORD@@` and `@@HEALTHCHECKS_PING_URL@@` placeholders.
 3. PowerShell, from the repo root:
    ```powershell
    ./platform/alertmanager/seal-config.ps1
    ```
-   Type the address; when asked, copy the app password and press Enter. The script checks the password's shape, seals the filled-in configuration into `platform/config/monitoring/alertmanager-config.sealedsecret.yaml` and checks the cluster can decrypt it. The plain configuration is never written to the repository. kubeseal is in `%LOCALAPPDATA%\Programs\kubeseal`.
+   Type the address; when asked, copy the app password and press Enter, then copy the healthchecks.io ping URL and press Enter. The script checks the shape of both, seals the filled-in configuration into `platform/config/monitoring/alertmanager-config.sealedsecret.yaml` and checks the cluster can decrypt it. The plain configuration is never written to the repository. kubeseal is in `%LOCALAPPDATA%\Programs\kubeseal`.
 4. Commit the sealed file in a pull request and merge. Alertmanager reloads the configuration within a few minutes.
 5. Test: send a test alert to Alertmanager and wait for its FIRING email:
    ```powershell
