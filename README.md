@@ -4,7 +4,7 @@
 
 **Larkspur Track**: an offline-first shipment tracking system for a (fictional) Larkspur Logistics regional warehouse, running on a 2-node **k3s** Kubernetes cluster of Raspberry Pi 5s, built and operated with production practices: Ansible, GitHub Actions, Argo CD (GitOps), cert-manager, Sealed Secrets, CloudNativePG, Prometheus/Grafana, and Azure for off-site backups and sync.
 
-> **Status:** Foundation, Infrastructure, Platform, CI/CD, Application, Operations (monitoring), Data (backups) and Integration (offline-first sync) done; Operations drills next. See [docs/plan.md](docs/plan.md).
+> **Status:** Foundation, Infrastructure, Platform, CI/CD, Application, Operations (monitoring), Data (backups), Integration (offline-first sync) and Operations drills done; Release next. See [docs/plan.md](docs/plan.md).
 
 | Host | Hardware | Role |
 |---|---|---|

@@ -1,4 +1,24 @@
-# Runbook: Replace a k3s node (e.g. failed SD card)
+# Runbook: Lose or replace a k3s node (e.g. failed SD card)
+
+## When a worker node goes down
+**Measured in the node-loss drill (`platform/drills/node-loss-drill.ps1`, lark-k3s-02, 11-27-2026):**
+| Time after the node stops | What happens |
+|---|---|
+| 0 to about 50 s | Kubernetes still lists the node's pods. Traefik tries a web pod on it, gives up after 2 s and retries on the other node's pod, so users see a short delay (prod 0, dev 1 failed request out of about 500). Before the retry (first run) 8 requests failed in prod and 7 in dev. |
+| about 50 s | The node is `NotReady` (`unreachable` taint); its pods leave the Services. One Alertmanager keeps emailing; `AlertmanagerClusterDown` and `KubeNodeNotReady` fire, as expected. |
+| about 5 minutes | Kubernetes reschedules the node's Deployments (web pod, sync worker, CoreDNS, cert-manager) on the other node. `LarkspurSyncWorkerDown` may fire; events wait in the outbox. The StatefulSet pod (one Alertmanager) waits for the node. |
+| After power-on | The node is Ready within about 20 s. Pods are not moved back. |
+
+Limits: each database lives on lark-k3s-01's card (local-path volumes), so **losing lark-k3s-01 stops both databases and the Kubernetes API** until it returns, or until the databases are rebuilt from Azure (`docs/runbooks/backups.md`, "Restore after losing the database"). k3s runs one CoreDNS and manages its manifest itself; the app keeps its open database connections while CoreDNS moves.
+
+**If the node is coming back** (power cut, reboot): power it on and check `kubectl get nodes`. Then spread the web pods across both nodes again, which a rolling restart does with no downtime:
+```powershell
+kubectl rollout restart deployment/larkspur-track -n larkspur-prod
+kubectl rollout restart deployment/larkspur-track -n larkspur-dev
+```
+**If it is not coming back:** replace it (below).
+
+## Replace a node
 
 Use when a worker node must be rebuilt from a blank card. Expected time: about 20 minutes.
 
