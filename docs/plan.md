@@ -45,7 +45,7 @@ Larkspur Logistics (fictional) opens a regional warehouse. Staff need shipment t
 | CI/CD | GitHub Actions, arm64 + amd64 images, Trivy, versioned GHCR images, CloudNativePG operator + dev and prod databases, Helm chart, Argo CD dev -> prod by pull request | PRs run lint + tests; merges build both architectures; promotion by PR; rollback by revert works | Done |
 | Data | Scheduled CloudNativePG backups to Azure Blob, restore | Azure cost approved first; restore to a new instance works; RPO/RTO targets met | Done: RPO 5 min / RTO 30 min targets; measured WAL in Azure in 2-5 s, restore in 71-81 s (ADR-0008) |
 | Integration | Offline-first outbox sync to Azure | With the uplink cut, staff keep working; when it returns, every event is delivered exactly once | Done: at-least-once delivery deduplicated by event_id (effectively once); uplink-cut drill kept and delivered 7 of 7 events, 5 s after the link returned, 0 duplicates (ADR-0009) |
-| Operations | Prometheus, Grafana, Alertmanager, app metrics, blackbox page checks (instead of Uptime Kuma, ADR-0007), SLOs, runbooks, failure drills | Alerts fire and resolve; SLOs measured; runbooks cover node loss, database pod loss and a bad release | Monitoring done (alerts fire and resolve, SLOs measured); drills next |
+| Operations | Prometheus, Grafana, Alertmanager, app metrics, blackbox page checks (instead of Uptime Kuma, ADR-0007), SLOs, runbooks, failure drills | Alerts fire and resolve; SLOs measured; runbooks cover node loss, database pod loss and a bad release | Done: drills for a bad release (users unaffected; faster rollback, CI tag check, LarkspurReleaseStuck), database loss (rebuilt from Azure in 60 s, nothing lost) and node loss (0 failed prod requests after adding Traefik retries; alert email kept with two Alertmanagers) |
 | Release | README + diagram, install guide, ADRs, interview guide, release notes | Tagged v1.0 release | Planned |
 
 **Build order:** Foundation -> Infrastructure -> Platform -> Application (core) -> CI/CD -> Application (sign-in) -> Operations (monitoring) -> Data -> Integration -> Operations (drills) -> Release.
@@ -79,6 +79,7 @@ Larkspur Logistics (fictional) opens a regional warehouse. Staff need shipment t
 | Client IP at the ingress | Application | Traefik DaemonSet, externalTrafficPolicy Local (ADR-0005) |
 | Backup target, credentials and recovery targets | Data | Azure Blob (Hot LRS) through the Barman Cloud plugin, per-environment SAS, RPO 5 min / RTO 30 min (ADR-0008) |
 | Alert channel and SLO targets | Operations | Email to Gmail; prod 99.5% success and 99% within 1 s over 7 days (ADR-0007) |
+| Failure handling from the drills | Operations | Argo CD retries with the latest commit; CI checks image tags exist; Alertmanager runs on both nodes; Traefik retries a web pod it cannot reach (2 s connect timeout) |
 | Sync target, delivery guarantee and credentials | Integration | Transactional outbox and one sync worker per environment; Azure Storage Queue (one per environment, messages never expire); at-least-once, deduplicated by event_id; send-only SAS per queue (ADR-0009) |
 
 ## 9. Working agreement
