@@ -129,7 +129,7 @@ kubectl logs -n larkspur-prod larkspur-db-1 --tail=50
 ```
 **Fix:**
 - A `cnpg.io/hibernation: on` annotation (left from a drill) → `kubectl annotate cluster larkspur-db -n larkspur-prod --overwrite cnpg.io/hibernation=off`.
-- The pod is Pending → its node is down; the data lives on that node (local-path), so the database returns when the node does (`docs/runbooks/replace-a-node.md` if it cannot). With two instances (dev since Phase 2), the operator promotes the replica first, so this alert means both are down.
+- The pod is Pending → its node is down; the data lives on that node (local-path), so the database returns when the node does (`docs/runbooks/replace-a-node.md` if it cannot). With two instances (both environments since Phase 2), the operator promotes the replica first, so this alert means both are down.
 - The database is up but the alert fires → check `allow-prometheus-to-larkspur-db-metrics` (`kubectl get networkpolicy -n larkspur-prod`).
 
 
