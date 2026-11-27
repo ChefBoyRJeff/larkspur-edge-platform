@@ -19,7 +19,7 @@ The site runs unattended in a warehouse server room on two Raspberry Pi 5s with 
   - **From the user's side:** the **blackbox exporter** loads `track`, `track-dev` and Grafana over HTTPS every 30 s, the way a browser does: same names and address as the admin PC's hosts file, through Traefik, trusting only the Larkspur root CA. This replaces Uptime Kuma from the original plan: the results land in Prometheus with everything else, use the same alert path and are declared in Git, with no separate app, database or UI to run.
 - **Alerting: Alertmanager emails a Gmail address** through `smtp.gmail.com:587` with a Gmail app password. The configuration is a template (`platform/alertmanager/alertmanager.yaml.tmpl`) that `seal-config.ps1` fills in and seals, so the address and password never reach Git in plain text.
   - Alerts are grouped by namespace and alert name, sent again every 12 hours while firing, and followed by a RESOLVED email.
-  - Watchdog (always firing by design), InfoInhibitor and `severity: info` alerts are not emailed.
+  - Watchdog (always firing by design), InfoInhibitor and `severity: info` alerts are not emailed. Watchdog pings a healthchecks.io check every minute instead (a dead man's switch), which emails if the pings stop.
   - A critical alert silences the warning with the same name and namespace.
   - Our rules use two severities: **critical** means someone should look now; **warning** means look today.
 - **Alert rules**, each with a section in `docs/runbooks/alerts.md`:
@@ -44,7 +44,7 @@ The site runs unattended in a warehouse server room on two Raspberry Pi 5s with 
 
 ## Consequences
 - Installing the stack raised memory use from 34% to 47% on lark-k3s-01 and from 14% to 22% on lark-k3s-02 (about 1 GB and 0.6 GB), mostly Prometheus and Grafana. Grafana runs near its 384 MiB limit and is watched.
-- Alerts depend on the cluster being up: if both Pis or the whole site lose power, nothing sends an email. An outside watchdog (a separate Raspberry Pi, `lark-mon01`) is the proposed fix and is not built yet.
+- Alerts depend on the cluster being up. Since 11-27-2026 the healthchecks.io dead man's switch covers that: when Prometheus, Alertmanager or the whole site stops, healthchecks.io emails within about 5 to 8 minutes. It was added after the lark-k3s-01 node-loss drill, where an 11-minute outage sent no email because the only Prometheus was on the lost node.
 - The page checks go to lark-k3s-01 like the admin PC does, so losing that Pi also fails the page checks, which matches what users would see.
 - A database outage sends two emails (`LarkspurDatabaseDown` and `LarkspurTrackUnavailable`); merging them would mean changing and re-sealing the Alertmanager configuration.
 - A new alert rule needs a runbook section; a new page check needs the count in `BlackboxProbesMissing` updated.
