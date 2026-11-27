@@ -1,5 +1,5 @@
 # Blackbox exporter: loads Larkspur's HTTPS pages from inside the cluster the way a user's
-# browser does (name -> Traefik on lark-k3s-01 -> TLS -> app), so Prometheus can alert when a
+# browser does (name -> shared address -> Traefik -> TLS -> app), so Prometheus can alert when a
 # page fails or is slow. The CA certificate and alert rules live in platform/config/monitoring.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -15,9 +15,10 @@ spec:
     helm:
       valuesObject:
         fullnameOverride: blackbox-exporter
-        # Same names and address as the admin PC's hosts file, until internal DNS (Phase 2).
+        # Same names and address as the admin PC's hosts file, until internal DNS (Phase 2):
+        # the shared address (kube-vip), so a lost node does not fail every check.
         hostAliases:
-          - ip: 192.168.1.199
+          - ip: 192.168.1.50
             hostNames:
               - track.larkspur.home.arpa
               - track-dev.larkspur.home.arpa
