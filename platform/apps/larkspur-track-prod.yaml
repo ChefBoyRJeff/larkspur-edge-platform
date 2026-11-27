@@ -24,6 +24,9 @@ spec:
       selfHeal: true
     retry:
       limit: 3
+      # Retry with the latest commit, so a revert merged during a failing sync is picked up
+      # by the next attempt (bad-release drill, 11-27-2026).
+      refresh: true
       backoff:
         duration: 10s
         factor: 2

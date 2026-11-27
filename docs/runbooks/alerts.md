@@ -71,6 +71,16 @@ Node load: Grafana **Node Exporter / Nodes**; database connections: `LarkspurDat
 **Check:** **Audit** page (`/audit`, filter `sign_in_failed`): which usernames and which addresses.
 **Fix:** one address trying many usernames → find that device on the network. A real user locked out → reset or unlock them (`docs/runbooks/user-administration.md`).
 
+### LarkspurReleaseStuck
+**Meaning:** a new release cannot start: for 5 minutes a migration, web or sync container has been unable to pull its image or start (ErrImagePull, ImagePullBackOff, CrashLoopBackOff, a missing secret), or the migration job has failed. The running release usually keeps serving, so users may notice nothing, but the release is not happening and Argo CD keeps retrying.
+**Check:**
+```powershell
+kubectl get pods -n larkspur-prod
+kubectl get application larkspur-track-prod -n argocd -o jsonpath='{.status.operationState.phase}: {.status.operationState.message}'
+kubectl logs -n larkspur-prod job/larkspur-track-migrate --tail=50
+```
+**Fix:** a tag that is not in GHCR, or a broken release → roll back (`docs/runbooks/release-and-rollback.md`, "Roll back a release that is stuck"). A migration error → fix forward. Measured in a drill (11-27-2026): with a tag missing from GHCR, users saw no errors (593 of 593 requests succeeded) and Argo CD showed the app as Healthy, which is why this alert exists.
+
 ### LarkspurTrackErrorBudgetBurn
 **Meaning:** prod is failing requests fast enough to use up the weekly availability budget (0.5% of requests): 10% of it within 1 hour or 25% within 6 hours (critical), or 50% within 1 day (warning). The `window` label says which.
 **Check:** the dashboard's **Prod SLOs** row (budget left) and error panels; the routes failing, as in `LarkspurTrackHighErrorRate`.

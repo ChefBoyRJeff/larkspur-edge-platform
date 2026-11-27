@@ -1,4 +1,5 @@
-# Pull request checks: app format, lint and tests against PostgreSQL 18; Helm chart lint and render.
+# Pull request checks: app format, lint and tests against PostgreSQL 18; Helm chart lint and render,
+# and that each environment's image tag exists in GHCR.
 # Third-party actions are pinned to full commit SHAs (version in the comment); see ADR-0003.
 name: CI
 
@@ -79,6 +80,24 @@ jobs:
             helm template larkspur-track charts/larkspur-track --namespace "larkspur-$env" \
               -f "charts/larkspur-track/values-$env.yaml"
             echo "::endgroup::"
+          done
+      # A promotion must name an image the Image workflow has published; otherwise the
+      # migration job cannot pull it and the sync hangs (bad-release drill, 11-27-2026).
+      - name: Each environment's image tag exists in GHCR
+        run: |
+          token=$(curl -fsS "https://ghcr.io/token?scope=repository:chefboyrjeff/larkspur-track:pull" | jq -r .token)
+          for env in dev prod; do
+            file="charts/larkspur-track/values-$env.yaml"
+            tag=$(sed -n 's/^  tag: *"\{0,1\}\([^"]*\)"\{0,1\} *$/\1/p' "$file")
+            if [ -z "$tag" ]; then echo "::error file=$file::no image tag"; exit 1; fi
+            code=$(curl -sS -o /dev/null -w '%{http_code}' -I -H "Authorization: Bearer $token" \
+              -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json' \
+              "https://ghcr.io/v2/chefboyrjeff/larkspur-track/manifests/$tag")
+            if [ "$code" != 200 ]; then
+              echo "::error file=$file::$tag is not in GHCR (HTTP $code); wait for the Image workflow or fix the tag"
+              exit 1
+            fi
+            echo "$env: $tag is in GHCR"
           done
       - name: Rendering without an image tag must fail
         run: |
