@@ -88,6 +88,8 @@ spec:
   egress:
     - to:
         - ipBlock: { cidr: 192.168.1.199/32 }
+        - ipBlock: { cidr: 192.168.1.200/32 }
+        - ipBlock: { cidr: 192.168.1.201/32 }
       ports:
         - { protocol: TCP, port: 6443 }
     - to:

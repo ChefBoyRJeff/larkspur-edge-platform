@@ -49,7 +49,8 @@ spec:
           port: 5432
 ---
 # The instance manager reports status to the Kubernetes API. kube-router matches the
-# translated endpoint (control-plane node, port 6443), which also covers 10.43.0.1:443.
+# translated endpoint (a control-plane server, port 6443), which also covers 10.43.0.1:443.
+# The API Service spreads connections over every server, so all three are listed.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -65,6 +66,10 @@ spec:
     - to:
         - ipBlock:
             cidr: 192.168.1.199/32
+        - ipBlock:
+            cidr: 192.168.1.200/32
+        - ipBlock:
+            cidr: 192.168.1.201/32
       ports:
         - protocol: TCP
           port: 6443
