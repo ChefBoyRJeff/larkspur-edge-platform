@@ -1,0 +1,60 @@
+# Turn a k3s agent into a control-plane server (embedded etcd), one node per run:
+#   ansible-playbook playbooks/promote-to-server.yml -K -e node=lark-k3s-02
+# The node must already be listed under k3s_server in inventory/hosts.yml (so site.yml agrees
+# afterwards). Its pods move to other nodes first; it holds no volumes (local-path volumes on
+# it would be lost). See docs/runbooks/control-plane.md.
+- name: Join token from the first server
+  hosts: "{{ groups['k3s_server'][0] }}"
+  become: true
+  tasks:
+    - name: Read node join token
+      ansible.builtin.slurp:
+        src: /var/lib/rancher/k3s/server/node-token
+      register: k3s_server_token_raw
+      no_log: true
+
+    - name: Keep join token in memory
+      ansible.builtin.set_fact:
+        k3s_server_node_token: "{{ k3s_server_token_raw.content | b64decode | trim }}"
+      no_log: true
+
+- name: Promote the agent
+  hosts: "{{ node }}"
+  become: true
+  tasks:
+    - name: Only an agent can be promoted
+      ansible.builtin.stat:
+        path: /usr/local/bin/k3s-agent-uninstall.sh
+      register: promote_agent
+
+    - name: Promote
+      when: promote_agent.stat.exists
+      block:
+        - name: Node has no local volumes
+          ansible.builtin.command:
+            cmd: k3s kubectl get pv -o jsonpath='{range .items[*]}{.spec.nodeAffinity.required.nodeSelectorTerms[0].matchExpressions[0].values[0]}{"\n"}{end}'
+          delegate_to: "{{ groups['k3s_server'][0] }}"
+          register: promote_pv_nodes
+          changed_when: false
+          failed_when: inventory_hostname in promote_pv_nodes.stdout_lines
+
+        - name: Drain node (move pods away)
+          ansible.builtin.command:
+            cmd: "k3s kubectl drain {{ inventory_hostname }} --ignore-daemonsets --delete-emptydir-data --timeout=300s"
+          delegate_to: "{{ groups['k3s_server'][0] }}"
+          changed_when: true
+
+        - name: Uninstall the agent
+          ansible.builtin.command:
+            cmd: /usr/local/bin/k3s-agent-uninstall.sh
+          changed_when: true
+
+        - name: Remove the old node object
+          ansible.builtin.command:
+            cmd: "k3s kubectl delete node {{ inventory_hostname }} --ignore-not-found"
+          delegate_to: "{{ groups['k3s_server'][0] }}"
+          changed_when: true
+
+    - name: Install as a server and join etcd
+      ansible.builtin.include_role:
+        name: k3s_server
