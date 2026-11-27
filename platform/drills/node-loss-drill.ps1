@@ -26,14 +26,15 @@ if (($n.status.conditions | Where-Object type -eq 'Ready').status -ne 'True') { 
 foreach ($s in $sites.GetEnumerator()) { if ((Invoke-WebRequest -Uri $s.Value -TimeoutSec 5 -SkipHttpErrorCheck).StatusCode -ne 200) { throw "$($s.Key) is not answering before the drill" } }
 
 function Get-State {
-    $node = kubectl get node $Node -o json | ConvertFrom-Json
-    $ready = ($node.status.conditions | Where-Object type -eq 'Ready').status
+    # Not $node: PowerShell names ignore case, so it would overwrite the -Node parameter.
+    $nodeObj = kubectl get node $Node -o json | ConvertFrom-Json
+    $ready = ($nodeObj.status.conditions | Where-Object type -eq 'Ready').status
     $pods = @((kubectl get pods -A --field-selector "spec.nodeName=$Node" -o json | ConvertFrom-Json).items | Where-Object { $_.status.phase -ne 'Succeeded' })
     $terminating = @($pods | Where-Object { $_.metadata.deletionTimestamp }).Count
     $dns = kubectl get deployment coredns -n kube-system -o jsonpath='{.status.readyReplicas}'
     $am = kubectl get statefulset alertmanager-kube-prometheus-stack-alertmanager -n monitoring -o jsonpath='{.status.readyReplicas}'
     $web = foreach ($e in 'prod', 'dev') { "$e web $([int](kubectl get deployment larkspur-track -n "larkspur-$e" -o jsonpath='{.status.readyReplicas}'))/2" }
-    "node Ready=$ready, taints [$(($node.spec.taints | ForEach-Object { $_.key -replace '^node.kubernetes.io/', '' }) -join ',')]; pods on it $($pods.Count) ($terminating terminating); CoreDNS ready $([int]$dns); Alertmanager ready $([int]$am); $($web -join ', ')"
+    "node Ready=$ready, taints [$(($nodeObj.spec.taints | ForEach-Object { $_.key -replace '^node.kubernetes.io/', '' }) -join ',')]; pods on it $($pods.Count) ($terminating terminating); CoreDNS ready $([int]$dns); Alertmanager ready $([int]$am); $($web -join ', ')"
 }
 
 # Users' view of each environment, once a second.

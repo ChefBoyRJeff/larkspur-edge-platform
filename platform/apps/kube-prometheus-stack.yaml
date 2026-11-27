@@ -61,6 +61,11 @@ spec:
             # (platform/alertmanager/seal-config.ps1) instead of these values.
             useExistingSecret: true
             configSecret: alertmanager-config
+            # One per node, so losing a node does not stop alert email (node-loss drill,
+            # 11-27-2026: the only replica was stuck on the lost node for the whole outage).
+            # The two replicas gossip, so each alert is still emailed once.
+            replicas: 2
+            podAntiAffinity: hard
             resources:
               requests: { cpu: 10m, memory: 32Mi }
               limits: { memory: 128Mi }
