@@ -129,7 +129,7 @@ Dashboards: https://grafana.larkspur.home.arpa (**Larkspur Track** shows the SLO
 | platform/ | GitOps manifests: bootstrap/ (root app), apps/ (Argo CD Applications), drills/ (restore and uplink-cut drills, not synced), argocd/ (Argo CD Helm values), alertmanager/ (alert email template and sealing script), config/ (CA issuers, app namespaces and guardrails, databases and their monitoring, sealed sync credentials, Traefik settings, monitoring rules and dashboards, HTTPS test page) |
 | charts/ | Helm chart for Larkspur Track (web Deployment, sync worker, migration job, Service, Ingress, Certificate, network policies, ServiceMonitor and PodMonitor, alert rules) with per-environment values |
 | azure/ | Bicep and scripts for the Azure side: backup storage and sync queues, budgets, per-environment backup and sync credentials |
-| docs/ | Plan, architecture decision records, runbooks, AI-use log |
+| docs/ | Plan, [install guide](docs/install.md) (rebuild from blank SD cards), [architecture decision records](docs/adr/README.md), runbooks, AI-use log |
 | .github/ | CI: pull request checks, multi-arch image builds to GHCR (amd64 + arm64), Dependabot |
 
 Larkspur Logistics is fictional. All data in this repository is synthetic.
