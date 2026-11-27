@@ -67,6 +67,20 @@ spec:
             summary: Many failed sign-ins to Larkspur Track in {{ $ns }}
             description: More than 20 sign-ins have failed in 15 minutes; check the audit log.
             runbook: docs/runbooks/alerts.md#larkspurtrackmanyfailedsignins
+        - alert: LarkspurReleaseStuck
+          # A new release cannot start: an image that cannot be pulled, a container that keeps
+          # crashing, or a failed migration. Running pods keep serving, so nothing else fires.
+          expr: |
+            max(kube_pod_container_status_waiting_reason{namespace="{{ $ns }}", container=~"migrate|web|sync", reason=~"ErrImagePull|ImagePullBackOff|InvalidImageName|CreateContainerConfigError|CrashLoopBackOff"}) > 0
+              or max(kube_job_failed{namespace="{{ $ns }}", job_name="larkspur-track-migrate", condition="true"}) > 0
+          for: 5m
+          labels:
+            severity: warning
+            namespace: {{ $ns }}
+          annotations:
+            summary: A Larkspur Track release in {{ $ns }} cannot start
+            description: A migration, web or sync container has been unable to start, or the migration has failed, for 5 minutes.
+            runbook: docs/runbooks/alerts.md#larkspurreleasestuck
         {{- if .Values.sync.enabled }}
         - alert: LarkspurSyncWorkerDown
           expr: absent(up{namespace="{{ $ns }}", pod=~"larkspur-track-sync-.*"} == 1)
