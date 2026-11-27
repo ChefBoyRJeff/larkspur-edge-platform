@@ -4,3 +4,8 @@ k3s_version: v1.37.2+k3s1
 k3s_server_ip: 192.168.1.199
 # Shared address for the Kubernetes API (kube-vip); outside the gateway's DHCP range (.64-.253).
 k3s_api_vip: 192.168.1.50
+# etcd on SD cards: fsync often takes hundreds of milliseconds, so etcd's defaults (100 ms heartbeat,
+# 1000 ms election timeout) cause leader elections under load. Keep election-timeout at 10x heartbeat.
+k3s_etcd_args:
+  - heartbeat-interval=500
+  - election-timeout=5000

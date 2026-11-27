@@ -10,3 +10,8 @@ server: https://{{ k3s_server_ip }}:6443
 tls-san:
   - {{ k3s_api_vip }}
   - {{ ansible_host }}
+# etcd timing for slow disks; every server must use the same values (see group_vars/k3s_cluster.yml).
+etcd-arg:
+{% for arg in k3s_etcd_args %}
+  - {{ arg }}
+{% endfor %}

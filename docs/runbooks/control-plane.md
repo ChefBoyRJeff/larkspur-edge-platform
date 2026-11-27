@@ -37,5 +37,12 @@ ansible-playbook playbooks/promote-to-server.yml -K -e node=lark-k3s-02
 ```
 It refuses if a local volume lives on the node, drains it, uninstalls the agent, deletes the old node object, installs k3s as a server that joins etcd, and checks it is an etcd member. Pods do not move back on their own.
 
+## Slow disks (SD cards)
+All three servers run etcd on SD cards. Even at rest, etcd logs `apply request took too long` (200-700 ms against an expected 100 ms). In the lark-k3s-01 node-loss drill on 11-27 the two remaining servers logged `slow fdatasync` 30 times and lost the etcd leader 3 times each while 23 evicted pods were rescheduled; k3s exited with `leaderelection lost for k3s-etcd`, and because each server's etcd runs inside k3s, one restart took the other below quorum. The API was down from about 04:16 to 04:19 PM.
+
+Mitigation: `k3s_etcd_args` in `ansible/inventory/group_vars/k3s_cluster.yml` sets `heartbeat-interval=500` and `election-timeout=5000`, applied by `site.yml` (one server at a time). The lasting fix is SSD storage for `/var/lib/rancher/k3s/server/db`.
+
+Check for disk pressure: `journalctl -u k3s --since -1h | grep -c 'slow fdatasync'` on a server.
+
 ## etcd snapshots
 k3s takes an etcd snapshot every 12 hours and keeps 5, on each server in `/var/lib/rancher/k3s/server/db/snapshots`. Take one before risky work: `sudo k3s etcd-snapshot save --name before-<change>`. Everything that matters is also in Git (Argo CD rebuilds it) or in Azure (databases), so snapshots save time rather than data.
