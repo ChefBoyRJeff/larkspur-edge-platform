@@ -4,18 +4,64 @@
     dest: /usr/local/bin/k3s-install.sh
     mode: "0755"
 
+- name: Is k3s installed here
+  ansible.builtin.stat:
+    path: /etc/systemd/system/k3s.service
+  register: k3s_server_unit
+
+- name: Does this server already use etcd
+  ansible.builtin.stat:
+    path: /var/lib/rancher/k3s/server/db/etcd
+  register: k3s_server_etcd
+
+# Converting the first server from SQLite to etcd: stop it and keep a copy of the SQLite
+# datastore first, so the conversion can be undone (docs/runbooks/control-plane.md).
+- name: Back up the SQLite datastore before converting to etcd
+  when:
+    - inventory_hostname == groups['k3s_server'][0]
+    - k3s_server_unit.stat.exists
+    - not k3s_server_etcd.stat.exists
+  block:
+    - name: Stop k3s for a consistent copy
+      ansible.builtin.service:
+        name: k3s
+        state: stopped
+
+    - name: Copy the SQLite datastore
+      ansible.builtin.command:
+        cmd: tar -czf /var/lib/rancher/k3s/server/sqlite-before-etcd.tar.gz -C /var/lib/rancher/k3s/server db token
+        creates: /var/lib/rancher/k3s/server/sqlite-before-etcd.tar.gz
+
+- name: k3s configuration directory present
+  ansible.builtin.file:
+    path: /etc/rancher/k3s
+    state: directory
+    mode: "0755"
+
+- name: k3s server configuration
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: /etc/rancher/k3s/config.yaml
+    owner: root
+    group: root
+    mode: "0600"
+  notify: Restart k3s
+
 - name: Server installed at the pinned k3s version
   ansible.builtin.command:
     cmd: /usr/local/bin/k3s-install.sh server
     creates: /etc/systemd/system/k3s.service
-  environment:
-    INSTALL_K3S_VERSION: "{{ k3s_version }}"
+  environment: "{{ {'INSTALL_K3S_VERSION': k3s_version} if inventory_hostname == groups['k3s_server'][0] else {'INSTALL_K3S_VERSION': k3s_version, 'K3S_TOKEN': hostvars[groups['k3s_server'][0]].k3s_server_node_token} }}"
+  no_log: true
 
 - name: Server service enabled and running
   ansible.builtin.service:
     name: k3s
     state: started
     enabled: true
+
+- name: Apply a configuration change now
+  ansible.builtin.meta: flush_handlers
 
 - name: Server node Ready
   ansible.builtin.command:
@@ -27,13 +73,25 @@
   changed_when: false
   check_mode: false
 
+- name: Server is an etcd member
+  ansible.builtin.command:
+    cmd: "k3s kubectl get node {{ inventory_hostname }} -o jsonpath='{.metadata.labels.node-role\\.kubernetes\\.io/etcd}'"
+  register: k3s_server_etcd_role
+  until: k3s_server_etcd_role.stdout == "true"
+  retries: 30
+  delay: 10
+  changed_when: false
+  when: not ansible_check_mode
+
 - name: Read node join token
   ansible.builtin.slurp:
     src: /var/lib/rancher/k3s/server/node-token
   register: k3s_server_token_raw
   no_log: true
+  when: inventory_hostname == groups['k3s_server'][0]
 
-- name: Keep join token in memory for agents
+- name: Keep join token in memory for the other nodes
   ansible.builtin.set_fact:
     k3s_server_node_token: "{{ k3s_server_token_raw.content | b64decode | trim }}"
   no_log: true
+  when: inventory_hostname == groups['k3s_server'][0]

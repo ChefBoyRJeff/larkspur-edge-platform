@@ -1,5 +1,6 @@
 # Pinned: upgrades happen by changing this value in a pull request
 k3s_version: v1.37.2+k3s1
+# The first server; servers and agents join through it.
 k3s_server_ip: 192.168.1.199
-node_timezone: America/New_York
-admin_user: larkadmin
+# Shared address for the Kubernetes API (kube-vip); outside the gateway's DHCP range (.64-.253).
+k3s_api_vip: 192.168.1.50

@@ -18,6 +18,7 @@
     line: '\1 cgroup_memory=1 cgroup_enable=memory'
     backrefs: true
   notify: Reboot node
+  when: inventory_hostname in groups['k3s_cluster']
 
 - name: Sudo timestamp timeout for the admin user
   ansible.builtin.copy:

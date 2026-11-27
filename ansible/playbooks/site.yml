@@ -1,13 +1,15 @@
 # Converge every node to its desired state. Safe to run repeatedly.
-- name: Base configuration for all cluster nodes
-  hosts: k3s_cluster
+- name: Base configuration for all nodes
+  hosts: k3s_cluster:site_services
   become: true
   roles:
     - common
 
-- name: Control plane (k3s server)
+# One server at a time, the first one first: the others join the etcd cluster it started.
+- name: Control plane (k3s servers with embedded etcd)
   hosts: k3s_server
   become: true
+  serial: 1
   roles:
     - k3s_server
 
