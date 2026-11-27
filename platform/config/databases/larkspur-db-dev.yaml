@@ -15,16 +15,28 @@ spec:
   imageName: ghcr.io/cloudnative-pg/postgresql:18.7-system-trixie
   # With one instance, a PodDisruptionBudget would block node drains (patch-nodes runbook).
   enablePDB: false
+  # Rebuilt from its Azure backups in the database-loss drill (11-27-2026). Bootstrap applies only
+  # when the cluster is created; the original was created with initdb (database and owner larkspur).
   bootstrap:
-    initdb:
+    recovery:
+      source: origin
       database: larkspur
       owner: larkspur
+  externalClusters:
+    - name: origin
+      plugin:
+        name: barman-cloud.cloudnative-pg.io
+        parameters:
+          barmanObjectName: larkspur-db-backup
+          serverName: larkspur-db
   # WAL archiving and base backups to Azure Blob Storage (larkspur-db-dev-backup.yaml).
+  # serverName: each rebuild archives under a new path (Barman will not mix two clusters' WAL).
   plugins:
     - name: barman-cloud.cloudnative-pg.io
       isWALArchiver: true
       parameters:
         barmanObjectName: larkspur-db-backup
+        serverName: larkspur-db-r1
   storage:
     storageClass: local-path
     size: 2Gi
