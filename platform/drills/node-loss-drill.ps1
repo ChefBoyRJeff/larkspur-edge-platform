@@ -1,14 +1,16 @@
 <#
 .SYNOPSIS
-Node-loss drill: shuts a worker node down without draining it, the way a power cut or a dead
-SD card would take it away, and records what users and the cluster see until it is back.
+Node-loss drill: shuts a node down without draining it, the way a power cut or a dead SD card
+would take it away, and records what users and the cluster see until it is back.
 
 Steps: probe both environments' /readyz (it needs the database) once a second from this PC; shut
 the node down over SSH (it asks for the sudo password); for -DownMinutes, log every change in the
-node's state, the pods still bound to it, CoreDNS, Alertmanager and the probes; ask for the node to
+node's state, the pods still bound to it, CoreDNS, Alertmanager, the database primaries, the
+holder of the shared API address, Prometheus and the probes; ask for the node to
 be powered on again; wait until it is Ready and both environments answer; summarise outages and
 alerts. Pods are not moved back afterwards; Kubernetes leaves them where they were rescheduled.
-Only for worker nodes (never the control plane). See docs/runbooks/replace-a-node.md.
+A control-plane server may be used only while three etcd servers are Ready (two stay, a majority).
+See docs/runbooks/replace-a-node.md and docs/runbooks/control-plane.md.
 Not synced by Argo CD.
 #>
 param(
@@ -21,7 +23,10 @@ $sites = [ordered]@{ prod = 'https://track.larkspur.home.arpa/readyz'; dev = 'ht
 $prom = '/api/v1/namespaces/monitoring/services/http:kube-prometheus-stack-prometheus:9090/proxy/api/v1'
 
 $n = kubectl get node $Node -o json | ConvertFrom-Json
-if ($n.metadata.labels.'node-role.kubernetes.io/control-plane') { throw "$Node is the control plane; this drill is for worker nodes" }
+if ($n.metadata.labels.'node-role.kubernetes.io/control-plane') {
+    $etcdReady = @((kubectl get nodes -l node-role.kubernetes.io/etcd=true -o json | ConvertFrom-Json).items | Where-Object { ($_.status.conditions | Where-Object type -eq 'Ready').status -eq 'True' }).Count
+    if ($etcdReady -lt 3) { throw "$Node is a control-plane server and only $etcdReady etcd servers are Ready; losing it would stop the API" }
+}
 if (($n.status.conditions | Where-Object type -eq 'Ready').status -ne 'True') { throw "$Node is not Ready before the drill" }
 foreach ($s in $sites.GetEnumerator()) { if ((Invoke-WebRequest -Uri $s.Value -TimeoutSec 5 -SkipHttpErrorCheck).StatusCode -ne 200) { throw "$($s.Key) is not answering before the drill" } }
 
@@ -34,7 +39,10 @@ function Get-State {
     $dns = kubectl get deployment coredns -n kube-system -o jsonpath='{.status.readyReplicas}'
     $am = kubectl get statefulset alertmanager-kube-prometheus-stack-alertmanager -n monitoring -o jsonpath='{.status.readyReplicas}'
     $web = foreach ($e in 'prod', 'dev') { "$e web $([int](kubectl get deployment larkspur-track -n "larkspur-$e" -o jsonpath='{.status.readyReplicas}'))/2" }
-    "node Ready=$ready, taints [$(($nodeObj.spec.taints | ForEach-Object { $_.key -replace '^node.kubernetes.io/', '' }) -join ',')]; pods on it $($pods.Count) ($terminating terminating); CoreDNS ready $([int]$dns); Alertmanager ready $([int]$am); $($web -join ', ')"
+    $db = foreach ($e in 'prod', 'dev') { "$e db primary $(kubectl get cluster larkspur-db -n "larkspur-$e" -o jsonpath='{.status.currentPrimary} ({.status.readyInstances} ready)')" }
+    $vip = kubectl get lease plndr-cp-lock -n kube-system -o jsonpath='{.spec.holderIdentity}'
+    $promReady = kubectl get statefulset prometheus-kube-prometheus-stack-prometheus -n monitoring -o jsonpath='{.status.readyReplicas}'
+    "node Ready=$ready, taints [$(($nodeObj.spec.taints | ForEach-Object { $_.key -replace '^node.kubernetes.io/', '' }) -join ',')]; pods on it $($pods.Count) ($terminating terminating); CoreDNS ready $([int]$dns); Alertmanager ready $([int]$am); Prometheus ready $([int]$promReady); VIP on $vip; $($web -join ', '); $($db -join ', ')"
 }
 
 # Users' view of each environment, once a second.
@@ -88,6 +96,10 @@ finally {
 foreach ($k in $probes.Keys) { $p = $probes[$k]; "$k /readyz: $($p.Ok) ok, $($p.Fail) failed; changes: [$($p.Changes -join '; ')]" }
 $window = [int][Math]::Ceiling(((Get-Date) - $downAt).TotalMinutes) + 2
 $expr = 'max by (alertname, alertstate) (max_over_time(ALERTS{alertname!~"Watchdog|InfoInhibitor"}[WINDOWm]))'.Replace('WINDOW', "$window")
-$fired = @((kubectl get --raw "$prom/query?query=$([uri]::EscapeDataString($expr))" | ConvertFrom-Json).data.result)
-"alerts pending or firing during the drill: [$(($fired | ForEach-Object { "$($_.metric.alertname)/$($_.metric.alertstate)" }) -join ', ')]"
+# Prometheus may itself have been on the lost node; then it has no record of the outage.
+try {
+    $fired = @((kubectl get --raw "$prom/query?query=$([uri]::EscapeDataString($expr))" 2>$null | ConvertFrom-Json).data.result)
+    "alerts pending or firing during the drill: [$(($fired | ForEach-Object { "$($_.metric.alertname)/$($_.metric.alertstate)" }) -join ', ')]"
+}
+catch { "alerts during the drill: Prometheus could not be queried ($($_.Exception.Message))" }
 "after: $(Get-State)"
