@@ -27,6 +27,37 @@ spec:
         - protocol: TCP
           port: 5432
 ---
+# The instances replicate to each other: a new replica copies the primary (pg_basebackup), then
+# streams its changes, both on 5432.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-larkspur-db-replication
+  namespace: larkspur-prod
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: larkspur-db
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: larkspur-db
+      ports:
+        - protocol: TCP
+          port: 5432
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: larkspur-db
+      ports:
+        - protocol: TCP
+          port: 5432
+---
 # Only Larkspur Track pods (app and migration job) may connect to PostgreSQL.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
