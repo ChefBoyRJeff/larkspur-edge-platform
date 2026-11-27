@@ -7,6 +7,8 @@ metadata:
     {{- include "larkspur-track.labels" . | nindent 4 }}
   annotations:
     traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    # Retry on the other pod when one cannot be reached (traefik.yaml).
+    traefik.ingress.kubernetes.io/router.middlewares: {{ .Release.Namespace }}-larkspur-track-retry@kubernetescrd
 spec:
   ingressClassName: traefik
   tls:

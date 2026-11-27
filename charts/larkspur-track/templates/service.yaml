@@ -4,6 +4,9 @@ metadata:
   name: larkspur-track
   labels:
     {{- include "larkspur-track.labels" . | nindent 4 }}
+  annotations:
+    # Connect timeout for Traefik (traefik.yaml).
+    traefik.ingress.kubernetes.io/service.serverstransport: {{ .Release.Namespace }}-larkspur-track@kubernetescrd
 spec:
   selector:
     {{- include "larkspur-track.selectorLabels" . | nindent 4 }}

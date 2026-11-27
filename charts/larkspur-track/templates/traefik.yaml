@@ -1,0 +1,26 @@
+# How Traefik reaches the web pods. When a node is lost, its pod stays in the Service for about
+# 50 seconds until Kubernetes marks the node unreachable; requests sent to it hung until they
+# timed out (node-loss drill, 11-27-2026). A short connect timeout plus a retry sends them to the
+# other pod instead. Traefik retries only when it got no response at all; in the rare case of a
+# pod dying in the middle of a request, that request could reach the app twice (creating a
+# shipment twice fails on its unique tracking number; a repeated status change is refused).
+apiVersion: traefik.io/v1alpha1
+kind: ServersTransport
+metadata:
+  name: larkspur-track
+  labels:
+    {{- include "larkspur-track.labels" . | nindent 4 }}
+spec:
+  forwardingTimeouts:
+    dialTimeout: {{ .Values.traefik.dialTimeout }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: larkspur-track-retry
+  labels:
+    {{- include "larkspur-track.labels" . | nindent 4 }}
+spec:
+  retry:
+    attempts: {{ .Values.traefik.retryAttempts }}
+    initialInterval: 100ms

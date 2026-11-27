@@ -24,6 +24,13 @@ database:
 
 displayTimezone: America/New_York
 
+# Traefik's connection to the web pods (templates/traefik.yaml).
+traefik:
+  # A pod on the same LAN answers in milliseconds; longer means it is gone.
+  dialTimeout: 2s
+  # Tries in total (Traefik's "attempts"), so one retry on another pod.
+  retryAttempts: 2
+
 metrics:
   # Prometheus metrics port; only Prometheus in the monitoring namespace may reach it
   # (networkpolicy.yaml). The Ingress routes only the http port, so it is never exposed.
