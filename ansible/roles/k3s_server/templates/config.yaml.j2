@@ -1,0 +1,12 @@
+# Managed by Ansible (larkspur-edge-platform). k3s reads this file when it starts.
+{% if inventory_hostname == groups['k3s_server'][0] %}
+# Embedded etcd. On a server that already ran SQLite, the next start converts the datastore;
+# once etcd exists on disk, this setting is ignored.
+cluster-init: true
+{% else %}
+server: https://{{ k3s_server_ip }}:6443
+{% endif %}
+# Names the API certificate must cover, so kubectl can use the shared address.
+tls-san:
+  - {{ k3s_api_vip }}
+  - {{ ansible_host }}
