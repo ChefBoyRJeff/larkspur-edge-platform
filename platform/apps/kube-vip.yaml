@@ -1,0 +1,56 @@
+# kube-vip: one shared address, 192.168.1.50, for the Kubernetes API. The three control-plane
+# servers elect a leader; the leader answers ARP for the address, and another server takes it
+# over within seconds when the leader is lost. Only the control plane: k3s ServiceLB still
+# publishes Traefik on every node, so the sites also answer on this address wherever it lives.
+# The address is outside the gateway's DHCP range (.64-.253) and in every server's API
+# certificate (ansible: k3s_api_vip). See docs/runbooks/control-plane.md.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-vip
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://kube-vip.github.io/helm-charts
+    chart: kube-vip
+    targetRevision: 0.11.2
+    helm:
+      valuesObject:
+        image:
+          tag: v1.2.4
+        config:
+          address: 192.168.1.50
+        env:
+          vip_interface: eth0
+          vip_arp: "true"
+          vip_subnet: "32"
+          port: "6443"
+          cp_enable: "true"
+          vip_leaderelection: "true"
+          # No IPVS load balancing and no Services: the address only moves between servers.
+          lb_enable: "false"
+          svc_enable: "false"
+          prometheus_server: ":2112"
+        # Only on control-plane servers.
+        nodeSelector:
+          node-role.kubernetes.io/control-plane: "true"
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 64Mi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
