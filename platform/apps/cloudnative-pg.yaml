@@ -13,6 +13,17 @@ spec:
     targetRevision: 0.29.2
     helm:
       valuesObject:
+        # Two replicas on different nodes: when the leader's node fails, the standby takes the
+        # leader-election lease within about 15 s instead of waiting for the 5-minute pod eviction.
+        replicaCount: 2
+        affinity:
+          podAntiAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              - topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: cloudnative-pg
+                    app.kubernetes.io/instance: cloudnative-pg
         resources:
           requests:
             cpu: 50m
