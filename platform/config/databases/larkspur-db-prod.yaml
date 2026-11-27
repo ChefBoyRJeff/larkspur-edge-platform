@@ -1,4 +1,5 @@
-# Prod database: one PostgreSQL 18 instance managed by CloudNativePG, configured like dev.
+# Prod database: PostgreSQL 18 managed by CloudNativePG, configured like dev: a primary and a
+# streaming replica on different nodes; if the primary's node is lost, the operator promotes the replica.
 # Backed up to Azure Blob Storage (larkspur-db-prod-backup.yaml, ADR-0008).
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
@@ -10,10 +11,16 @@ metadata:
     # platform-config retries the sync until it does.
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
-  instances: 1
+  instances: 2
+  # Never two instances on the same node (each keeps its data on its node's card).
+  affinity:
+    enablePodAntiAffinity: true
+    podAntiAffinityType: required
+    topologyKey: kubernetes.io/hostname
   # Pinned to the operator 1.30.2 default so operator upgrades never change PostgreSQL silently.
   imageName: ghcr.io/cloudnative-pg/postgresql:18.7-system-trixie
-  # With one instance, a PodDisruptionBudget would block node drains (patch-nodes runbook).
+  # No PodDisruptionBudget: draining the primary's node fails over to the replica (a few
+  # seconds of reconnects) instead of blocking the drain (patch-nodes runbook).
   enablePDB: false
   bootstrap:
     initdb:
