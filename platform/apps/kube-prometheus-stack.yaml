@@ -90,6 +90,18 @@ spec:
           resources:
             requests: { cpu: 10m, memory: 32Mi }
             limits: { memory: 128Mi }
+          # Leave a lost node after 30 s instead of the default 5 minutes. One replica on purpose:
+          # two would export every series twice. Without it, alerts on pod and deployment state
+          # (LarkspurTrackUnavailable) had no data for the whole outage in the node-loss drill.
+          tolerations:
+            - key: node.kubernetes.io/unreachable
+              operator: Exists
+              effect: NoExecute
+              tolerationSeconds: 30
+            - key: node.kubernetes.io/not-ready
+              operator: Exists
+              effect: NoExecute
+              tolerationSeconds: 30
         prometheus-node-exporter:
           resources:
             requests: { cpu: 10m, memory: 16Mi }

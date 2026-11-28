@@ -32,15 +32,17 @@ spec:
     - name: larkspur-db
       rules:
         - alert: LarkspurDatabaseDown
-          # No instance reports PostgreSQL up (pod gone, PostgreSQL stopped, or metrics unreachable).
-          expr: absent(cnpg_collector_up{namespace="larkspur-dev"} == 1)
+          # No instance reports itself as the primary (not in recovery): the database cannot take
+          # writes. A live replica alone does not count (node-loss drill, 11-27-2026: the replica
+          # kept reporting up while the primary's node was off, so the old rule never fired).
+          expr: absent(cnpg_pg_replication_in_recovery{namespace="larkspur-dev"} == 0)
           for: 2m
           labels:
             severity: critical
             namespace: larkspur-dev
           annotations:
             summary: The larkspur-dev database is down
-            description: PostgreSQL has not reported up for 2 minutes.
+            description: No PostgreSQL instance has reported as the primary for 2 minutes.
             runbook: docs/runbooks/alerts.md#larkspurdatabasedown
         - alert: LarkspurDatabaseReplicaMissing
           # Fewer than two instances report PostgreSQL up: the database still works, but it no
