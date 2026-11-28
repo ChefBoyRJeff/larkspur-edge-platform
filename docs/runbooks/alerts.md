@@ -119,7 +119,7 @@ kubectl logs -n larkspur-prod deploy/larkspur-track-sync --tail=20
 ## Database
 
 ### LarkspurDatabaseDown
-**Meaning:** PostgreSQL has not reported up for 2 minutes: the pod is gone, PostgreSQL stopped, or Prometheus cannot reach the metrics port.
+**Meaning:** no PostgreSQL instance has reported as the primary for 2 minutes, so the database cannot take writes: the primary's pod or node is gone and no replica was promoted, PostgreSQL stopped, or Prometheus cannot reach the metrics port. A replica that is still up does not stop this alert. A normal failover finishes in about 90 s, before the alert fires.
 **Check:**
 ```powershell
 kubectl get cluster larkspur-db -n larkspur-prod
