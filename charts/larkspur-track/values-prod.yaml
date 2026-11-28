@@ -2,6 +2,7 @@
 # that has already run in dev.
 image:
   tag: sha-8b59929
+environment: prod
 host: track.larkspur.home.arpa
 # Sends outbox events to Azure (needs larkspur-track-sync-credentials in the namespace).
 sync:
