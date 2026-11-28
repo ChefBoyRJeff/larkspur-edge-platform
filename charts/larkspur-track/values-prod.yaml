@@ -1,7 +1,7 @@
 # Prod environment (namespace larkspur-prod). Promote a release by changing image.tag to a tag
 # that has already run in dev.
 image:
-  tag: sha-8b59929
+  tag: sha-1750fc9
 environment: prod
 host: track.larkspur.home.arpa
 # Sends outbox events to Azure (needs larkspur-track-sync-credentials in the namespace).
