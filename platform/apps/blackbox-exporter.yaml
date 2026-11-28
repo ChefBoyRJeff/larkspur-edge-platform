@@ -15,6 +15,18 @@ spec:
     helm:
       valuesObject:
         fullnameOverride: blackbox-exporter
+        # Two replicas on different nodes. The Probes scrape through the Service, so each check
+        # still runs once; with one replica, losing its node left LarkspurEndpointDown without
+        # data (node-loss drill, 11-27-2026: no probe results from 09:46 to 09:54 PM).
+        replicas: 2
+        affinity:
+          podAntiAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              - topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: prometheus-blackbox-exporter
+                    app.kubernetes.io/instance: blackbox-exporter
         # Same names and address as the admin PC's hosts file, until internal DNS (Phase 2):
         # the shared address (kube-vip), so a lost node does not fail every check.
         hostAliases:
