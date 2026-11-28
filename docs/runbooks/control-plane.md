@@ -1,13 +1,13 @@
 # Runbook: Control plane (k3s servers and etcd)
 
-The Kubernetes API and the cluster's state live on the k3s servers, in embedded etcd. Phase 2 moves from one server with SQLite to three servers with etcd, so the cluster keeps working when any one node is lost.
+The Kubernetes API and the cluster's state live on the k3s servers, in embedded etcd. Phase 2 moved from one server with SQLite to three servers with etcd, so the cluster keeps working when any one node is lost (ADR-0010).
 
 | Node | Address | Role |
 |---|---|---|
 | lark-k3s-01 (Pi 5) | 192.168.1.199 | Server; started the etcd cluster (`cluster-init`) |
 | lark-k3s-02 (Pi 5) | 192.168.1.200 | Server (promoted from agent) |
 | lark-k3s-03 (Pi 4) | 192.168.1.201 | Server |
-| Shared API address | 192.168.1.50 | Planned (kube-vip); already in every server's API certificate |
+| Shared API address | 192.168.1.50 | kube-vip (`platform/apps/kube-vip.yaml`): held by one server at a time, moves within seconds; in every server's API certificate. The admin PC's kubeconfig uses it. |
 
 Ansible owns all of it: `ansible/inventory/hosts.yml` (which nodes are servers), `roles/k3s_server` (each server's `/etc/rancher/k3s/config.yaml`). Run from WSL:
 ```bash

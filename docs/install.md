@@ -2,12 +2,12 @@
 
 How to rebuild the whole system on blank SD cards: the nodes, k3s, the platform, the secrets, Azure and both environments. Most steps link to the runbook that holds the detail. Expect about two hours, most of it waiting.
 
-Use this guide for a new site or after losing both nodes. To replace one node, use `docs/runbooks/replace-a-node.md` instead.
+Use this guide for a new site or after losing two or more nodes. To replace one node, use `docs/runbooks/replace-a-node.md` instead. This guide has not yet been run end to end on blank cards; its steps come from the procedures used to build the site.
 
 ## What you need
 | What | Notes |
 |---|---|
-| 2 Raspberry Pi 5 (8 GB) with SD cards, power, and a LAN with fixed addresses | `lark-k3s-01` at 192.168.1.199 (control plane, holds every volume), `lark-k3s-02` at 192.168.1.200 (worker) |
+| 3 Raspberry Pis for the cluster and 1 for DNS, with SD cards, power, and a LAN with fixed addresses | k3s servers `lark-k3s-01` (Pi 5, 192.168.1.199), `lark-k3s-02` (Pi 5, .200), `lark-k3s-03` (Pi 4, .201); Pi-hole on `lark-dns-01` (Pi 4, .202); 192.168.1.50 free for kube-vip, outside the DHCP range |
 | Admin PC: Windows, PowerShell 7, Git, VS Code | Clone this repository to `C:\Development\larkspur-edge-platform` |
 | WSL (Ubuntu) with Ansible and the `larkspur_ansible` SSH key | For the node playbooks |
 | kubectl, kubeseal 0.41.2 (`%LOCALAPPDATA%\Programs\kubeseal`), Azure CLI with Bicep | kubeseal must match the controller in `platform/apps/sealed-secrets.yaml` |
@@ -16,15 +16,15 @@ Use this guide for a new site or after losing both nodes. To replace one node, u
 | A password manager (Bitwarden) | Every password in this guide is created and stored there; none is ever pasted into chat, Git or a ticket |
 | GitHub access to `ChefBoyRJeff/larkspur-edge-platform`, an Azure subscription, a Gmail account with an app password | |
 
-## 1. Flash both cards
-Follow `docs/runbooks/replace-a-node.md`, "2. Flash a new card", once for each node, with hostnames `lark-k3s-01` and `lark-k3s-02`. If the PC knew earlier cards, forget their host keys (same runbook, step 3).
+## 1. Flash the cards
+Follow `docs/runbooks/replace-a-node.md`, "2. Flash a new card", once for each Pi, with hostnames `lark-k3s-01`, `lark-k3s-02`, `lark-k3s-03` and `lark-dns-01`. If the PC knew earlier cards, forget their host keys (same runbook, step 3).
 
 ## 2. Install k3s with Ansible (WSL)
 ```bash
 cd /mnt/c/Development/larkspur-edge-platform/ansible
 ansible-playbook playbooks/site.yml -K
 ```
-It configures both nodes and installs the pinned k3s version (`ansible/inventory/group_vars/k3s_cluster.yml`). The nodes reboot once. Running it a second time must report `changed=0`.
+It configures every Pi, installs the pinned k3s version (`ansible/inventory/group_vars/k3s_cluster.yml`) on the servers one at a time (lark-k3s-01 starts the etcd cluster, the others join it), and installs Pi-hole on lark-dns-01. The k3s nodes reboot once. Running it a second time must report `changed=0`. Then set the Pi-hole web password (`docs/runbooks/dns.md`).
 
 ## 3. Give the PC access to the cluster (PowerShell)
 The kubeconfig on `lark-k3s-01` is a cluster-admin credential: copy it only to the admin PC.
@@ -35,7 +35,7 @@ ssh larkadmin@lark-k3s-01.local 'rm /home/larkadmin/k3s.yaml'
 (Get-Content $HOME\.kube\larkspur.yaml) -replace '127.0.0.1', '192.168.1.199' -replace ': default$', ': larkspur-labs' | Set-Content $HOME\.kube\larkspur.yaml
 $env:KUBECONFIG = "$HOME\.kube\larkspur.yaml"; kubectl get nodes
 ```
-Both nodes must be `Ready`. Make the file your default kubeconfig (or set `KUBECONFIG` in your PowerShell profile).
+All three nodes must be `Ready`. Make the file your default kubeconfig (or set `KUBECONFIG` in your PowerShell profile). After step 4, when kube-vip runs, change the server to the shared address so the PC keeps working if lark-k3s-01 is down: `(Get-Content $HOME\.kube\larkspur.yaml) -replace '192.168.1.199', '192.168.1.50' | Set-Content $HOME\.kube\larkspur.yaml`.
 
 ## 4. Install Argo CD and hand over to Git
 Follow `docs/runbooks/bootstrap-argocd.md`. After `kubectl apply -f platform/bootstrap/root-app.yaml`, Argo CD installs everything in `platform/apps/` from `main`.
@@ -51,7 +51,7 @@ Import-Certificate -FilePath "$HOME\larkspur-root-ca.crt" -CertStoreLocation Cer
 ```
 Remove the previous cluster's "Larkspur Labs Root CA" in `certmgr.msc` (Trusted Root Certification Authorities), so only the current one is trusted.
 
-Then, in a PowerShell window **run as Administrator**, add the names to the hosts file if they are missing: `test`, `track`, `track-dev` and `grafana` `.larkspur.home.arpa`, all at 192.168.1.199.
+Then send the site's names to Pi-hole with the NRPT rule in `docs/runbooks/dns.md`, "Point the admin PC at Pi-hole" (PowerShell as Administrator). No hosts-file entries are needed.
 
 ## 6. Azure
 If the resource groups `rg-lark-edge-backup` and `rg-lark-edge-integration` still exist, keep them: they hold the backups, and nothing else is needed here. Otherwise **check the cost first** (ADR-0008 and ADR-0009: well under $1 a month together), then deploy each one with its script. Each needs a `main.local.bicepparam` (gitignored) with the budget alert email:
@@ -93,5 +93,6 @@ If the databases started empty, create the first admin of each environment (`doc
 
 ## Known limits
 - **The Sealed Secrets key is not backed up**, so every new cluster needs step 7. Backing it up (`kubectl get secret -n kube-system -l sealedsecrets.bitnami.com/sealed-secrets-key -o yaml`) would let the sealed files in Git work again, but the file is as sensitive as all the secrets together and must be kept offline.
-- `lark-k3s-01` holds every volume and the Kubernetes API: if it is lost, both databases come back only from Azure (step 8).
+- Each database has a copy on two nodes, and etcd needs two of the three servers. Losing two nodes stops the API, and can lose both copies of a database; then the databases come back only from Azure (step 8).
+- All nodes run from SD cards; see ADR-0010 for what that costs during a node loss.
 - Each new cluster has a new root CA, so every PC must trust it again (step 5).

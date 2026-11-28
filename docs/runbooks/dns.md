@@ -1,6 +1,6 @@
 # Site DNS (Pi-hole on lark-dns-01)
 
-Pi-hole on `lark-dns-01` (192.168.1.202, Raspberry Pi 4) answers DNS for the site: local names under `larkspur.home.arpa` and everything else through Quad9. It replaces the hosts-file entries on the admin PC. The cluster does not use it: pods resolve through CoreDNS, and the blackbox exporter keeps its own `hostAliases`.
+Pi-hole on `lark-dns-01` (192.168.1.202, Raspberry Pi 4) answers DNS for the site: local names under `larkspur.home.arpa` and everything else through Quad9. It replaces the hosts-file entries on the admin PC (ADR-0011). The cluster does not use it: pods resolve through CoreDNS, and the blackbox exporter keeps its own `hostAliases`.
 
 | Name | Address |
 |---|---|
@@ -31,16 +31,17 @@ Resolve-DnsName microsoft.com -Server 192.168.1.202 -DnsOnly
 ```
 
 ## Point the admin PC at Pi-hole
-The AT&T gateway hands out itself as the DNS server, so each device is set by hand. PowerShell as Administrator:
+Send only the site's names to Pi-hole with a Name Resolution Policy Table (NRPT) rule; the PC's normal DNS stays on the gateway (ADR-0011). Pointing the adapter's DNS at Pi-hole first was tried and did not work: Windows still got "name does not exist" from the gateway. PowerShell as Administrator:
 ```powershell
-Get-NetAdapter | Where-Object Status -eq Up
-Set-DnsClientServerAddress -InterfaceAlias '<adapter name>' -ServerAddresses 192.168.1.202, 192.168.1.254
+Add-DnsClientNrptRule -Namespace '.larkspur.home.arpa' -NameServers 192.168.1.202 -Comment 'Larkspur site DNS (Pi-hole on lark-dns-01)'
+Clear-DnsClientCache
+Resolve-DnsName track.larkspur.home.arpa -DnsOnly
 ```
-The gateway is the second server so the internet keeps working if Pi-hole is down; local names then fail, which is the visible sign. After `Resolve-DnsName track.larkspur.home.arpa` (without `-Server`) answers 192.168.1.50, remove the `larkspur.home.arpa` lines from `C:\Windows\System32\drivers\etc\hosts`.
+When it answers 192.168.1.50, back up `C:\Windows\System32\drivers\etc\hosts` and remove its `larkspur.home.arpa` lines. Check: `Get-DnsClientNrptRule`, then open the sites.
 
-**Undo:** `Set-DnsClientServerAddress -InterfaceAlias '<adapter name>' -ResetServerAddresses`, and restore the hosts file from its `hosts.bak-<date>` copy.
+**Undo:** `Get-DnsClientNrptRule | Where-Object Namespace -contains '.larkspur.home.arpa' | Remove-DnsClientNrptRule -Force`, and restore the hosts file from its backup.
 
 ## Limits
-- One DNS server. If lark-dns-01 is down, devices using it fall back to the gateway and local names stop resolving; the sites themselves keep running.
-- Not monitored by Prometheus yet.
+- One DNS server. If lark-dns-01 is down, the site's names stop resolving on the PC (internet names still work through the gateway); the sites themselves keep running.
+- Not monitored by Prometheus yet, and not patched by `patch.yml` (patch it with `sudo apt update && sudo apt full-upgrade` and `sudo pihole -up`).
 - The Active Directory domain (Phase 2, Module 2) will need a conditional forwarder from Pi-hole to the domain controller.

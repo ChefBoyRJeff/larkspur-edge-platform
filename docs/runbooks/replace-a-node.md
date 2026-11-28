@@ -1,17 +1,19 @@
 # Runbook: Lose or replace a k3s node (e.g. failed SD card)
 
-## When a worker node goes down
-**Measured in the node-loss drill (`platform/drills/node-loss-drill.ps1`, lark-k3s-02, 11-27-2026):**
+## When a node goes down
+All three nodes are k3s servers (`docs/runbooks/control-plane.md`), and each database has a copy on two of them, so losing any one node needs no action. **Measured in the node-loss drill (`platform/drills/node-loss-drill.ps1`, lark-k3s-02 holding both database primaries, 11-27-2026, 11:26 PM):**
 | Time after the node stops | What happens |
 |---|---|
-| 0 to about 50 s | Kubernetes still lists the node's pods. Traefik tries a web pod on it, gives up after 2 s and retries on the other node's pod, so users see a short delay (prod 0, dev 1 failed request out of about 500). Before the retry (first run) 8 requests failed in prod and 7 in dev. |
-| about 50 s | The node is `NotReady` (`unreachable` taint); its pods leave the Services. One Alertmanager keeps emailing; `AlertmanagerClusterDown` and `KubeNodeNotReady` fire, as expected. |
-| about 5 minutes | Kubernetes reschedules the node's Deployments (web pod, sync worker, CoreDNS, cert-manager) on the other node. `LarkspurSyncWorkerDown` may fire; events wait in the outbox. The StatefulSet pod (one Alertmanager) waits for the node. |
-| After power-on | The node is Ready within about 20 s. Pods are not moved back. |
+| 0 s | Database connections to the primaries fail; the web pods' readiness check needs the database, so the sites return 503. If kube-vip's address (192.168.1.50) was on the lost node, another server takes it within seconds. |
+| about 50 s | The node is `NotReady` (`unreachable` taint); its pods leave the Services. kube-state-metrics, if it was there, moves after 30 s more. |
+| about 90 s | The CloudNativePG operator promotes each replica; the `-rw` Services follow and the sites serve again (prod 86 s). `LarkspurDatabaseDown` (2 minutes) does not fire for a failover this fast. |
+| about 5 minutes | Kubernetes evicts the node's pods and starts the Deployments elsewhere. On the SD cards this burst of writes makes k3s restart on the other servers: the API drops for about a minute and the sites for 36-48 s (ADR-0010). |
+| 10 minutes | `LarkspurDatabaseReplicaMissing` fires: each database runs on one copy. |
+| after power-on | The node is Ready in under a minute; its database instances rejoin as replicas. If one stays not ready, see `docs/runbooks/alerts.md`, LarkspurDatabaseReplicaMissing. Pods are not moved back. |
 
-Limits: each database lives on lark-k3s-01's card (local-path volumes), so **losing lark-k3s-01 stops both databases and the Kubernetes API** until it returns, or until the databases are rebuilt from Azure (`docs/runbooks/backups.md`, "Restore after losing the database"). k3s runs one CoreDNS and manages its manifest itself; the app keeps its open database connections while CoreDNS moves.
+If the lost node held Prometheus, nothing inside the cluster can alert; the healthchecks.io dead man's switch emails about 6 minutes in (`docs/runbooks/alerts.md`, "Dead man's switch").
 
-**If the node is coming back** (power cut, reboot): power it on and check `kubectl get nodes`. Then spread the web pods across both nodes again, which a rolling restart does with no downtime:
+**If the node is coming back** (power cut, reboot): power it on and check `kubectl get nodes`. Then spread the web pods across the nodes again, which a rolling restart does with no downtime:
 ```powershell
 kubectl rollout restart deployment/larkspur-track -n larkspur-prod
 kubectl rollout restart deployment/larkspur-track -n larkspur-dev
@@ -20,7 +22,10 @@ kubectl rollout restart deployment/larkspur-track -n larkspur-dev
 
 ## Replace a node
 
-Use when a worker node must be rebuilt from a blank card. Expected time: about 20 minutes.
+Use when a node must be rebuilt from a blank card. Expected time: about 20 minutes. The steps below were rehearsed for an agent (worker) in v1.0; all nodes are servers now, and replacing a server has **not** been rehearsed yet.
+
+- **lark-k3s-02 or lark-k3s-03:** follow the steps, using `k3s` instead of `k3s-agent` in step 1. k3s should remove a deleted server from etcd (not yet seen here); check that the remaining two are still members (`kubectl get nodes -L node-role.kubernetes.io/etcd`) before rebuilding. Its database instances' volumes are gone with the card: once the node is back, delete each one's PVC and pod so the operator builds a new replica (`docs/runbooks/alerts.md`, LarkspurDatabaseReplicaMissing).
+- **lark-k3s-01: do not rebuild it with the playbook as it is.** The role gives the first server in the inventory `cluster-init`, which would start a second, empty cluster. Move another server to the top of `k3s_server` in `ansible/inventory/hosts.yml` first (pull request), so lark-k3s-01 joins it.
 
 ## Prerequisites
 - WSL Ubuntu with Ansible and the `larkspur_ansible` key (unlocked by keychain).
@@ -58,7 +63,7 @@ ansible-playbook playbooks/site.yml -K
 The node reboots once (memory cgroup) and rejoins.
 
 ## 5. Verify
-- `kubectl get nodes -o wide`: node `Ready`, role `worker`, pinned k3s version.
+- `kubectl get nodes -o wide -L node-role.kubernetes.io/etcd`: node `Ready`, roles `control-plane,etcd`, pinned k3s version.
 - A second `ansible-playbook playbooks/site.yml -K` reports `changed=0` on every node.
 
 ## Troubleshooting
