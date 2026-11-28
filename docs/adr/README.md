@@ -13,8 +13,10 @@ Each record explains one decision: the context, what was decided, the alternativ
 | [0007](0007-monitoring-and-alerting.md) | kube-prometheus-stack with blackbox page checks, email alerts and 7-day SLOs | 11-25-2026 |
 | [0008](0008-database-backups.md) | WAL archiving and nightly base backups to Azure Blob Storage with per-environment SAS tokens; RPO 5 minutes, RTO 30 minutes | 11-25-2026 |
 | [0009](0009-offline-first-sync.md) | Transactional outbox and a sync worker sending to Azure Storage Queue, at least once, with a send-only credential | 11-26-2026 |
+| [0010](0010-high-availability.md) | Three k3s servers with embedded etcd, kube-vip for the API address, two database instances, and every failover component on two nodes | 11-27-2026 |
+| [0011](0011-site-dns.md) | Pi-hole on lark-dns-01 for the site's names, reached from the admin PC through an NRPT rule | 11-27-2026 |
 
-Later changes that came out of the Operations drills (Argo CD retries with the latest commit, the image tag check in CI, two Alertmanagers, Traefik retries) are recorded in `docs/plan.md`, "Decisions", and in the runbooks they affect.
+Later changes that came out of the Operations drills (Argo CD retries with the latest commit, the image tag check in CI, two Alertmanagers, Traefik retries) are recorded in `docs/plan.md`, "Decisions", and in the runbooks they affect. The Phase 2 node-loss drills are recorded in ADR-0010.
 
 ## Adding a record
 Copy the shape of an existing record (Status, Date, Context, Decision, Alternatives considered, Consequences), number it next in sequence, add it to this table, and merge it in the same pull request as the change it explains.
