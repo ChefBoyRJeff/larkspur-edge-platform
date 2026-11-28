@@ -175,10 +175,11 @@ Each database archives its WAL to Azure Blob Storage continuously and takes a ba
 **Meaning:** a WAL file failed to reach Azure in the last 10 minutes and none has succeeded since. Changes since the last successful archive exist only on the node's SD card, and PostgreSQL keeps the unarchived WAL, so its disk use grows.
 **Check:**
 ```powershell
-kubectl logs -n larkspur-prod larkspur-db-1 -c plugin-barman-cloud --tail=50
+$p = kubectl get cluster larkspur-db -n larkspur-prod -o jsonpath='{.status.currentPrimary}'
+kubectl logs -n larkspur-prod $p -c plugin-barman-cloud --tail=50 | Select-String 'barman-cloud-wal-archive'
 kubectl get objectstore larkspur-db-backup -n larkspur-prod -o yaml
 ```
-`AuthenticationFailed` or `403` → the SAS token expired or its access policy was removed; a connection error → the node's internet connection or `allow-larkspur-db-to-azure-blob`.
+Look at the archive lines only: `WAL file ... does not exist` from `barman-cloud-wal-restore` is normal while a replica catches up or is promoted. `AuthenticationFailed` or `403` → the SAS token expired or its access policy was removed; a connection error → the node's internet connection or `allow-larkspur-db-to-azure-blob`.
 **Fix:** credential problems → create a new one (`docs/runbooks/backups.md`, "Rotate the credential"). Network problems → once the connection returns, PostgreSQL archives the backlog by itself; check that the alert clears.
 
 ### LarkspurBackupTooOld
