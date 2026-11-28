@@ -55,6 +55,7 @@ Larkspur Logistics (fictional) opens a regional warehouse. Staff need shipment t
 | Module | Scope | Done when | Status |
 |---|---|---|---|
 | 1. High availability and site DNS | Two Pi 4s; three k3s servers with embedded etcd; kube-vip; two database instances; failover components on two nodes; Pi-hole on lark-dns-01 | Losing any one node needs no action and the sites return within minutes; alerts still arrive; names resolve without the hosts file | Done: node-loss drills took prod from 11 min 6 s down to about 90 s, plus a 36-48 s gap from etcd on SD cards (ADR-0010); Pi-hole and an NRPT rule replace the hosts file (ADR-0011) |
+| App: warehouse features | UNCG colours; customers, carriers, bins and dock doors; then a better shipment list, an operations dashboard, sample data and test users | Each released to dev, then prod, with tests and a migration where needed | In progress |
 | 2. Corporate IT | lark-hv01 (Dell 3620) as a Hyper-V host with a domain controller VM; Pi-hole forwards the domain | Domain joined from the admin PC; names resolve both ways | Planned |
 | 3. Identity | Entra Connect; OIDC sign-in for Larkspur Track | Users sign in with their directory account; roles map from groups | Planned |
 | 4. Queue receiver | Azure Function reading the sync queues, deduplicating by event_id | Every event processed once; cost approved first | Planned |

@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Setup · Larkspur Track{% endblock %}
+{% macro toggle(kind, row) -%}
+<form class="inline" method="post" action="/setup/{{ kind }}/{{ row.id }}/active">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="active" value="{{ 'false' if row.is_active else 'true' }}">
+  <button type="submit" class="secondary">{{ "Deactivate" if row.is_active else "Reactivate" }}</button>
+</form>
+{%- endmacro %}
+{% macro name_table(kind, rows) %}
+<table>
+  <thead><tr><th>Name</th><th>Status</th><th></th></tr></thead>
+  <tbody>
+  {% for row in rows %}
+    <tr><td>{{ row.name }}</td><td>{{ "Active" if row.is_active else "Inactive" }}</td>
+      <td>{% if not (kind == "customer" and row.name == "Unassigned") %}{{ toggle(kind, row) }}{% endif %}</td></tr>
+  {% else %}
+    <tr><td colspan="3" class="muted">None yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endmacro %}
+{% block content %}
+<h1>Setup</h1>
+<p class="muted">Customers, carriers, bins and dock doors. Inactive ones are no longer offered for new shipments or steps; shipments that use them keep their history.</p>
+{% if done %}<p class="done">{{ done }}</p>{% endif %}
+
+<section id="customers">
+<h2>Customers</h2>
+<form class="search" method="post" action="/setup/customers">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div><label for="customer_name">New customer</label><input id="customer_name" name="name" required maxlength="120"></div>
+  <button type="submit">Add customer</button>
+</form>
+{% if errors.customer %}<p class="error">{{ errors.customer }}</p>{% endif %}
+{{ name_table("customer", customers) }}
+</section>
+
+<section id="carriers">
+<h2>Carriers</h2>
+<form class="search" method="post" action="/setup/carriers">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div><label for="carrier_name">New carrier</label><input id="carrier_name" name="name" required maxlength="120"></div>
+  <button type="submit">Add carrier</button>
+</form>
+{% if errors.carrier %}<p class="error">{{ errors.carrier }}</p>{% endif %}
+{{ name_table("carrier", carriers) }}
+</section>
+
+<section id="locations">
+<h2>Bins and dock doors</h2>
+<form class="search" method="post" action="/setup/locations">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div><label for="code">Code</label><input id="code" name="code" required maxlength="20" placeholder="A-06-1 or D5"></div>
+  <div><label for="kind">Kind</label>
+    <select id="kind" name="kind"><option value="bin">Bin</option><option value="dock_door">Dock door</option></select></div>
+  <button type="submit">Add location</button>
+</form>
+{% if errors.location %}<p class="error">{{ errors.location }}</p>{% endif %}
+<table>
+  <thead><tr><th>Code</th><th>Kind</th><th>Status</th><th></th></tr></thead>
+  <tbody>
+  {% for row in dock_doors + bins %}
+    <tr><td>{{ row.code }}</td><td>{{ "Dock door" if row.kind == "dock_door" else "Bin" }}</td>
+      <td>{{ "Active" if row.is_active else "Inactive" }}</td><td>{{ toggle("location", row) }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</section>
+{% endblock %}

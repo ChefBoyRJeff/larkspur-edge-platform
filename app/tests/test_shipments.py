@@ -6,7 +6,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from larkspur_track.models import Shipment
-from larkspur_track.services import ShipmentNotFoundError, advance_shipment, create_shipment
+from larkspur_track.services import (
+    ShipmentNotFoundError,
+    StepDetails,
+    advance_shipment,
+    create_shipment,
+)
 from larkspur_track.workflow import InvalidTransitionError, ShipmentStatus
 
 
@@ -29,11 +34,13 @@ def test_create_shipment_starts_received_with_one_event(db_session: Session) -> 
     ]
 
 
-def test_full_workflow_records_every_step_in_order(db_session: Session) -> None:
+def test_full_workflow_records_every_step_in_order(
+    db_session: Session, step_details: StepDetails
+) -> None:
     shipment = _new_shipment(db_session)
 
     for target in (ShipmentStatus.STORED, ShipmentStatus.PICKED, ShipmentStatus.SHIPPED):
-        advance_shipment(db_session, shipment.id, target)
+        advance_shipment(db_session, shipment.id, target, details=step_details)
     db_session.expire_all()
     reloaded = db_session.get(Shipment, shipment.id)
 

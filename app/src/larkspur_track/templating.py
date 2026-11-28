@@ -16,8 +16,11 @@ from larkspur_track.roles import UserRole, has_role
 def _page_context(request: Request) -> dict[str, Any]:
     """The running release, who is signed in, their role, and the CSRF token forms must send."""
     auth = getattr(request.state, "auth", None)
+    settings = get_settings()
+    environment = settings.site_environment.strip().lower()
     return {
-        "app_release": get_settings().app_release,
+        "app_release": settings.app_release,
+        "environment_badge": "" if environment == "prod" else environment.upper(),
         "current_user": auth,
         "csrf_token": auth.csrf_token if auth else "",
         "is_supervisor": auth is not None and has_role(auth.role, UserRole.SUPERVISOR),

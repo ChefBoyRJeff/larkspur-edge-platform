@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from larkspur_track.models import OutboxEvent
-from larkspur_track.services import advance_shipment, create_shipment
+from larkspur_track.services import StepDetails, advance_shipment, create_shipment
 from larkspur_track.sync import OutboxCollector, QueueSender, SendError, send_pending
 from larkspur_track.workflow import ShipmentStatus
 
@@ -38,12 +38,12 @@ def _factory(session: Session):  # noqa: ANN202
     return lambda: contextlib.nullcontext(session)
 
 
-def _three_events(session: Session) -> None:
+def _three_events(session: Session, details: StepDetails) -> None:
     shipment = create_shipment(
         session, tracking_number="LRK-SYNC-0001", consignee="Acme (fictional)", destination="Dock 2"
     )
-    advance_shipment(session, shipment.id, ShipmentStatus.STORED)
-    advance_shipment(session, shipment.id, ShipmentStatus.PICKED)
+    advance_shipment(session, shipment.id, ShipmentStatus.STORED, details=details)
+    advance_shipment(session, shipment.id, ShipmentStatus.PICKED, details=details)
 
 
 def _rows(session: Session) -> list[OutboxEvent]:
@@ -51,8 +51,10 @@ def _rows(session: Session) -> list[OutboxEvent]:
     return list(session.scalars(select(OutboxEvent).order_by(OutboxEvent.id)))
 
 
-def test_sends_every_event_oldest_first_and_marks_them_sent(db_session: Session) -> None:
-    _three_events(db_session)
+def test_sends_every_event_oldest_first_and_marks_them_sent(
+    db_session: Session, step_details: StepDetails
+) -> None:
+    _three_events(db_session, step_details)
     sender = FakeSender()
 
     result = send_pending(_factory(db_session), sender, "larkspur-dev")
@@ -66,8 +68,10 @@ def test_sends_every_event_oldest_first_and_marks_them_sent(db_session: Session)
     assert send_pending(_factory(db_session), sender, "larkspur-dev").sent == 0
 
 
-def test_a_failure_stops_the_round_and_keeps_the_order(db_session: Session) -> None:
-    _three_events(db_session)
+def test_a_failure_stops_the_round_and_keeps_the_order(
+    db_session: Session, step_details: StepDetails
+) -> None:
+    _three_events(db_session, step_details)
 
     result = send_pending(_factory(db_session), FakeSender(fail_from=2), "larkspur-dev")
 
@@ -86,8 +90,8 @@ def test_a_failure_stops_the_round_and_keeps_the_order(db_session: Session) -> N
     assert rows[1].attempts == 2 and rows[1].last_error is None
 
 
-def test_limit_and_rate_limit(db_session: Session) -> None:
-    _three_events(db_session)
+def test_limit_and_rate_limit(db_session: Session, step_details: StepDetails) -> None:
+    _three_events(db_session, step_details)
     pauses: list[float] = []
 
     result = send_pending(
@@ -98,13 +102,13 @@ def test_limit_and_rate_limit(db_session: Session) -> None:
     assert pauses == [0.1, 0.1]
 
 
-def test_outbox_collector_reports_backlog(db_session: Session) -> None:
+def test_outbox_collector_reports_backlog(db_session: Session, step_details: StepDetails) -> None:
     registry = CollectorRegistry()
     registry.register(OutboxCollector(_factory(db_session)))
     assert registry.get_sample_value("larkspur_outbox_pending") == 0
     assert registry.get_sample_value("larkspur_outbox_oldest_pending_seconds") == 0
 
-    _three_events(db_session)
+    _three_events(db_session, step_details)
 
     assert registry.get_sample_value("larkspur_outbox_pending") == 3
     assert registry.get_sample_value("larkspur_outbox_oldest_pending_seconds") >= 0

@@ -23,6 +23,8 @@ database:
   secretKey: uri
 
 displayTimezone: America/New_York
+# Which environment this is (dev or prod); set in values-<env>.yaml. Not prod shows a badge.
+environment: local
 
 # Traefik's connection to the web pods (templates/traefik.yaml).
 traefik:

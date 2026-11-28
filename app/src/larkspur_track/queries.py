@@ -3,7 +3,7 @@
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from larkspur_track.models import Shipment
+from larkspur_track.models import Location, Shipment
 from larkspur_track.workflow import ShipmentStatus
 
 SEARCH_LIMIT = 50
@@ -16,17 +16,18 @@ def search_shipments(
     status: ShipmentStatus | None = None,
     limit: int = SEARCH_LIMIT,
 ) -> list[Shipment]:
-    """Newest shipments first, matching the text (tracking number or consignee) and status.
+    """Newest shipments first, matching the text (tracking number, consignee or bin) and status.
 
     The text match ignores case, and % or _ in the text are matched literally, not as wildcards.
     """
-    statement = select(Shipment)
+    statement = select(Shipment).outerjoin(Location, Shipment.bin_id == Location.id)
     text = query.strip()
     if text:
         statement = statement.where(
             or_(
                 Shipment.tracking_number.icontains(text, autoescape=True),
                 Shipment.consignee.icontains(text, autoescape=True),
+                Location.code.icontains(text, autoescape=True),
             )
         )
     if status is not None:

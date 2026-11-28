@@ -1,4 +1,5 @@
-"""ORM models: shipments and their timeline, users, sessions, the audit log, and the sync outbox."""
+"""ORM models: shipments and their timeline, the customers, carriers and warehouse locations they
+refer to, users, sessions, the audit log, and the sync outbox."""
 
 import uuid
 from datetime import datetime
@@ -41,6 +42,51 @@ def _status_type(name: str) -> Enum:
     return _text_enum(ShipmentStatus, name)
 
 
+class LocationKind(StrEnum):
+    """Bins hold stored goods; dock doors are where picked goods wait for the carrier."""
+
+    BIN = "bin"
+    DOCK_DOOR = "dock_door"
+
+
+# The customer every shipment received before customers existed belongs to (see the migration).
+UNASSIGNED_CUSTOMER = "Unassigned"
+
+
+class Customer(Base):
+    """A company the warehouse handles goods for (Larkspur works as a third-party warehouse)."""
+
+    __tablename__ = "customers"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(120), unique=True)
+    is_active: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Carrier(Base):
+    """A trucking company that collects shipments from a dock door."""
+
+    __tablename__ = "carriers"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(120), unique=True)
+    is_active: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Location(Base):
+    """A place in the warehouse: a bin (for example A-03-2: aisle, bay, level) or a dock door."""
+
+    __tablename__ = "locations"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    code: Mapped[str] = mapped_column(String(20), unique=True)
+    kind: Mapped[LocationKind] = mapped_column(_text_enum(LocationKind, "kind"))
+    is_active: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class Shipment(Base):
     """A shipment handled by the warehouse."""
 
@@ -53,11 +99,20 @@ class Shipment(Base):
     status: Mapped[ShipmentStatus] = mapped_column(
         _status_type("status"), default=ShipmentStatus.RECEIVED
     )
+    customer_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("customers.id"), index=True)
+    # Set when the shipment is stored, and when it is picked (dock door and carrier).
+    bin_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("locations.id"), index=True)
+    dock_door_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("locations.id"))
+    carrier_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("carriers.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
+    customer: Mapped[Customer] = relationship()
+    bin: Mapped[Location | None] = relationship(foreign_keys=[bin_id])
+    dock_door: Mapped[Location | None] = relationship(foreign_keys=[dock_door_id])
+    carrier: Mapped[Carrier | None] = relationship()
     # Quoted because ShipmentEvent is defined below; SQLAlchemy resolves it by name.
     events: Mapped[list["ShipmentEvent"]] = relationship(  # noqa: UP037
         back_populates="shipment", order_by="ShipmentEvent.occurred_at"
@@ -74,6 +129,8 @@ class ShipmentEvent(Base):
     from_status: Mapped[ShipmentStatus | None] = mapped_column(_status_type("from_status"))
     to_status: Mapped[ShipmentStatus] = mapped_column(_status_type("to_status"))
     note: Mapped[str | None] = mapped_column(String(500))
+    # What the step recorded, for the timeline: "Bin A-03-2", "Dock door D2, carrier ...".
+    detail: Mapped[str | None] = mapped_column(String(200))
     # clock_timestamp(), not now(): now() is fixed for a whole transaction and would tie events.
     occurred_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("clock_timestamp()")

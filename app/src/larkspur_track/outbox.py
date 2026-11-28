@@ -16,7 +16,12 @@ STATUS_CHANGED = "shipment.status_changed"
 
 
 def event_payload(shipment: Shipment, event: ShipmentEvent, actor: str | None) -> dict[str, Any]:
-    """The event as Azure receives it. Keep in step with the backfill in migration 9b2e7d4c1a05."""
+    """The event as Azure receives it.
+
+    Events queued by the backfill in migration 9b2e7d4c1a05 have the same shape without the
+    customer, bin, dock_door, carrier and detail fields, which were added later (receivers treat
+    a missing field as unknown).
+    """
     return {
         "event_id": str(event.id),
         "event_type": RECEIVED if event.from_status is None else STATUS_CHANGED,
@@ -26,10 +31,15 @@ def event_payload(shipment: Shipment, event: ShipmentEvent, actor: str | None) -
             "tracking_number": shipment.tracking_number,
             "consignee": shipment.consignee,
             "destination": shipment.destination,
+            "customer": shipment.customer.name,
+            "bin": shipment.bin.code if shipment.bin else None,
+            "dock_door": shipment.dock_door.code if shipment.dock_door else None,
+            "carrier": shipment.carrier.name if shipment.carrier else None,
         },
         "from_status": None if event.from_status is None else event.from_status.value,
         "to_status": event.to_status.value,
         "note": event.note,
+        "detail": event.detail,
         "actor": actor,
     }
 

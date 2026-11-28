@@ -29,6 +29,11 @@ class AuditAction(StrEnum):
     USER_REACTIVATED = "user_reactivated"
     USER_PASSWORD_RESET = "user_password_reset"  # noqa: S105 (an action name, not a password)
     USER_UNLOCKED = "user_unlocked"
+    CUSTOMER_ADDED = "customer_added"
+    CARRIER_ADDED = "carrier_added"
+    LOCATION_ADDED = "location_added"
+    SETUP_DEACTIVATED = "setup_deactivated"
+    SETUP_REACTIVATED = "setup_reactivated"
 
 
 def client_address(request: Request) -> str | None:

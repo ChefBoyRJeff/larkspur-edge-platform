@@ -8,7 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from larkspur_track import admin_routes, audit_routes, auth_routes
+from larkspur_track import admin_routes, audit_routes, auth_routes, setup_routes
 from larkspur_track.config import MetricsSettings
 from larkspur_track.db import get_engine
 from larkspur_track.metrics import MetricsMiddleware, start_metrics_server
@@ -54,6 +54,7 @@ def create_app() -> FastAPI:
     app.include_router(router)
     app.include_router(admin_routes.router)
     app.include_router(audit_routes.router)
+    app.include_router(setup_routes.router)
     return app
 
 

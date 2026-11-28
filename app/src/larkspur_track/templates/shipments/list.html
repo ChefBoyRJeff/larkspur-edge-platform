@@ -6,7 +6,7 @@
 <form class="search" method="get" action="/shipments">
   <div>
     <label for="q">Search</label>
-    <input id="q" name="q" value="{{ q }}" placeholder="Tracking number or consignee" maxlength="100">
+    <input id="q" name="q" value="{{ q }}" placeholder="Tracking number, consignee or bin" maxlength="100">
   </div>
   <div>
     <label for="status">Status</label>
@@ -22,14 +22,16 @@
 </form>
 {% if shipments %}
 <table>
-  <thead><tr><th>Tracking number</th><th>Consignee</th><th>Destination</th><th>Status</th><th>Received</th></tr></thead>
+  <thead><tr><th>Tracking number</th><th>Customer</th><th>Consignee</th><th>Destination</th><th>Status</th><th>Bin</th><th>Received</th></tr></thead>
   <tbody>
   {% for shipment in shipments %}
     <tr>
-      <td><a href="/shipments/{{ shipment.id }}">{{ shipment.tracking_number }}</a></td>
+      <td class="nowrap"><a href="/shipments/{{ shipment.id }}">{{ shipment.tracking_number }}</a></td>
+      <td>{{ shipment.customer.name }}</td>
       <td>{{ shipment.consignee }}</td>
       <td>{{ shipment.destination }}</td>
-      <td><span class="status">{{ shipment.status }}</span></td>
+      <td class="nowrap"><span class="status {{ shipment.status }}">{{ shipment.status }}</span></td>
+      <td class="nowrap">{{ shipment.bin.code if shipment.bin else "" }}</td>
       <td>{{ shipment.created_at | local_time }}</td>
     </tr>
   {% endfor %}

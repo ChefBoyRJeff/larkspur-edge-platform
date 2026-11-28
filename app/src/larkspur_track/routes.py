@@ -10,11 +10,18 @@ from sqlalchemy.orm import Session
 
 from larkspur_track.audit import AuditAction, record_by
 from larkspur_track.auth import RoleRequired, SessionDep, SignedIn, require_signed_in
-from larkspur_track.forms import clean_note, parse_shipment_form
-from larkspur_track.models import Shipment
+from larkspur_track.catalog import carriers, customers, locations
+from larkspur_track.forms import clean_note, parse_shipment_form, parse_uuid
+from larkspur_track.models import LocationKind, Shipment
 from larkspur_track.queries import SEARCH_LIMIT, count_by_status, search_shipments
 from larkspur_track.roles import has_role
-from larkspur_track.services import ShipmentNotFoundError, advance_shipment, create_shipment
+from larkspur_track.services import (
+    ShipmentNotFoundError,
+    StepDetails,
+    StepInputError,
+    advance_shipment,
+    create_shipment,
+)
 from larkspur_track.templating import render
 from larkspur_track.workflow import (
     InvalidTransitionError,
@@ -49,6 +56,15 @@ def _detail(
     auth: SignedIn = request.state.auth
     context = {
         "shipment": shipment,
+        "bins": locations(session, LocationKind.BIN, active_only=True)
+        if following is ShipmentStatus.STORED
+        else [],
+        "dock_doors": locations(session, LocationKind.DOCK_DOOR, active_only=True)
+        if following is ShipmentStatus.PICKED
+        else [],
+        "carriers": carriers(session, active_only=True)
+        if following is ShipmentStatus.PICKED
+        else [],
         "next_status": following,
         "role_needed": role_needed_for(following) if following else None,
         "may_advance": following is not None and has_role(auth.role, role_needed_for(following)),
@@ -88,9 +104,24 @@ def dashboard(request: Request, session: SessionDep) -> HTMLResponse:
     return render(request, "dashboard.html", {"counts": counts, "total": sum(counts.values())})
 
 
+def _new_page(
+    request: Request,
+    session: Session,
+    values: dict[str, str],
+    errors: dict[str, str],
+    status_code: int = 200,
+) -> HTMLResponse:
+    context = {
+        "values": values,
+        "errors": errors,
+        "customers": customers(session, active_only=True),
+    }
+    return render(request, "shipments/new.html", context, status_code)
+
+
 @router.get("/shipments/new")
-def new_shipment(request: Request) -> HTMLResponse:
-    return render(request, "shipments/new.html", {"values": {}, "errors": {}})
+def new_shipment(request: Request, session: SessionDep) -> HTMLResponse:
+    return _new_page(request, session, {}, {})
 
 
 @router.post("/shipments")
@@ -98,20 +129,25 @@ def receive_shipment(
     request: Request,
     session: SessionDep,
     auth: AuthDep,
+    customer_id: FormText = "",
     tracking_number: FormText = "",
     consignee: FormText = "",
     destination: FormText = "",
     note: FormText = "",
 ) -> Response:
     values = {
+        "customer_id": customer_id,
         "tracking_number": tracking_number,
         "consignee": consignee,
         "destination": destination,
         "note": note,
     }
     data, errors = parse_shipment_form(tracking_number, consignee, destination, note)
-    if data is None:
-        return render(request, "shipments/new.html", {"values": values, "errors": errors}, 422)
+    customer = parse_uuid(customer_id)
+    if customer is None:
+        errors["customer_id"] = "Choose a customer."
+    if data is None or customer is None:
+        return _new_page(request, session, values, errors, 422)
     try:
         shipment = create_shipment(
             session,
@@ -120,6 +156,7 @@ def receive_shipment(
             destination=data.destination,
             note=data.note,
             actor_id=auth.user_id,
+            customer_id=customer,
         )
         shipment_id = shipment.id
         record_by(
@@ -132,10 +169,13 @@ def receive_shipment(
             detail=shipment.tracking_number,
         )
         session.commit()
+    except StepInputError as problem:
+        session.rollback()
+        return _new_page(request, session, values, {"customer_id": str(problem)}, 422)
     except IntegrityError:
         session.rollback()
         errors = {"tracking_number": "A shipment with this tracking number already exists."}
-        return render(request, "shipments/new.html", {"values": values, "errors": errors}, 409)
+        return _new_page(request, session, values, errors, 409)
     return RedirectResponse(f"/shipments/{shipment_id}", status_code=303)
 
 
@@ -152,6 +192,9 @@ def advance(
     auth: AuthDep,
     target: FormText = "",
     note: FormText = "",
+    bin_id: FormText = "",
+    dock_door_id: FormText = "",
+    carrier_id: FormText = "",
 ) -> Response:
     note_clean, note_error = clean_note(note)
     if note_error:
@@ -162,9 +205,14 @@ def advance(
         return _detail(request, session, shipment_id, error="Unknown status.", status_code=422)
     if not has_role(auth.role, role_needed_for(target_status)):
         raise RoleRequired(role_needed_for(target_status))
+    details = StepDetails(
+        bin_id=parse_uuid(bin_id),
+        dock_door_id=parse_uuid(dock_door_id),
+        carrier_id=parse_uuid(carrier_id),
+    )
     try:
         event = advance_shipment(
-            session, shipment_id, target_status, note_clean, actor_id=auth.user_id
+            session, shipment_id, target_status, note_clean, actor_id=auth.user_id, details=details
         )
         record_by(
             session,
@@ -182,4 +230,7 @@ def advance(
     except InvalidTransitionError:
         session.rollback()
         return _detail(request, session, shipment_id, error=OUT_OF_DATE, status_code=409)
+    except StepInputError as problem:
+        session.rollback()
+        return _detail(request, session, shipment_id, error=str(problem), status_code=422)
     return RedirectResponse(f"/shipments/{shipment_id}", status_code=303)
