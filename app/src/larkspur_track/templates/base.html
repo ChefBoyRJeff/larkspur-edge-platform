@@ -5,40 +5,67 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Larkspur Track{% endblock %}</title>
   <style>
-    body { font-family: system-ui, sans-serif; margin: 0; color: #1f2933; background: #f5f7fa; }
-    header { background: #3d2c5e; padding: 0.75rem 1.5rem; display: flex; gap: 1.5rem; align-items: center; }
+    /* UNCG colours: navy, gold, white and grays. The UNCG grays are too light for text on white,
+       so they are used for borders and backgrounds, and secondary text uses a darker gray. */
+    :root { --navy: #0f2044; --gold: #ffb71b; --gray: #bec0c2; --gray-mid: #a6b0b7;
+      --gray-light: #e5e6e4; --page: #f3f3f1; --text: #1b2333; --muted: #4f5a66; }
+    body { font-family: system-ui, sans-serif; margin: 0; color: var(--text); background: var(--page); }
+    header { background: var(--navy); border-bottom: 4px solid var(--gold); padding: 0.75rem 1.5rem;
+      display: flex; flex-wrap: wrap; gap: 1.25rem; align-items: center; }
     header a { color: #fff; text-decoration: none; }
-    header .brand { font-weight: 600; margin-right: auto; }
-    main { max-width: 60rem; margin: 1.5rem auto; padding: 0 1.5rem; }
-    table { width: 100%; border-collapse: collapse; background: #fff; }
-    th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #e4e7eb; }
-    .status { padding: 0.1rem 0.6rem; border-radius: 1rem; background: #e9e3f5; font-size: 0.85rem; }
+    header a:hover, header a:focus { color: var(--gold); }
+    header .brand { font-weight: 700; letter-spacing: 0.02em; margin-right: auto; display: flex;
+      align-items: center; gap: 0.6rem; }
+    header .env { background: var(--gold); color: var(--navy); font-size: 0.75rem; font-weight: 700;
+      padding: 0.1rem 0.5rem; border-radius: 0.25rem; }
+    header .who { color: var(--gray-light); font-size: 0.9rem; }
+    header form { margin: 0; }
+    header form button { margin-top: 0; padding: 0.3rem 0.8rem; background: transparent; color: #fff;
+      border: 1px solid var(--gray); }
+    main { max-width: 64rem; margin: 1.5rem auto; padding: 0 1.5rem; }
+    h1, h2 { color: var(--navy); }
+    a { color: var(--navy); }
+    table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid var(--gray-light); }
+    th { background: var(--gray-light); color: var(--navy); }
+    th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid var(--gray-light); }
+    .status { padding: 0.1rem 0.6rem; border-radius: 1rem; background: var(--gray-light);
+      color: var(--navy); font-size: 0.85rem; border: 1px solid var(--gray); }
+    .status.shipped { background: var(--gold); border-color: var(--gold); }
     .error { color: #b42318; }
     .done { color: #05603a; }
-    .muted { color: #616e7c; }
+    .muted { color: var(--muted); }
     section { margin-top: 2rem; }
     form.stack label { display: block; margin-top: 0.75rem; font-weight: 600; }
-    input, textarea, select { width: 100%; max-width: 28rem; padding: 0.4rem; }
-    button, .button { display: inline-block; margin-top: 1rem; padding: 0.5rem 1rem; background: #3d2c5e;
-      color: #fff; border: 0; border-radius: 0.25rem; text-decoration: none; cursor: pointer; }
+    form.stack button { display: block; }
+    .nowrap { white-space: nowrap; }
+    input, textarea, select { width: 100%; max-width: 28rem; padding: 0.4rem; border: 1px solid var(--gray-mid);
+      border-radius: 0.25rem; background: #fff; }
+    input:focus, textarea:focus, select:focus { outline: 2px solid var(--gold); outline-offset: 1px; }
+    button, .button { display: inline-block; margin-top: 1rem; padding: 0.5rem 1rem; background: var(--gold);
+      color: var(--navy); font-weight: 600; border: 0; border-radius: 0.25rem; text-decoration: none; cursor: pointer; }
+    button:hover, .button:hover { background: #ffc94d; }
+    button.secondary { background: #fff; border: 1px solid var(--gray-mid); color: var(--navy); font-weight: 400; }
     form.search { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end; margin: 1rem 0; }
     form.search label { display: block; font-weight: 600; }
     form.search input { width: 18rem; }
     form.search select { width: 9rem; }
     form.search button { margin-top: 0; }
+    form.inline { display: inline; margin: 0; }
+    form.inline button { margin-top: 0; padding: 0.2rem 0.6rem; }
     .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 1rem; }
     .card { background: #fff; border-radius: 0.5rem; padding: 1rem; text-decoration: none; color: inherit;
-      border: 1px solid #e4e7eb; }
-    .card .count { display: block; font-size: 2rem; font-weight: 700; color: #3d2c5e; }
-    header .who { color: #e9e3f5; font-size: 0.9rem; }
-    header form { margin: 0; }
-    header form button { margin-top: 0; padding: 0.3rem 0.8rem; background: transparent; border: 1px solid #fff; }
-    footer { max-width: 60rem; margin: 2rem auto; padding: 0 1.5rem; color: #616e7c; font-size: 0.8rem; }
+      border: 1px solid var(--gray-light); border-top: 4px solid var(--gold); }
+    .card .count { display: block; font-size: 2rem; font-weight: 700; color: var(--navy); }
+    .panel { background: #fff; border: 1px solid var(--gray-light); border-radius: 0.5rem; padding: 1rem 1.25rem; }
+    dl.facts { display: grid; grid-template-columns: max-content 1fr; gap: 0.3rem 1rem; margin: 0; }
+    dl.facts dt { font-weight: 600; color: var(--navy); }
+    dl.facts dd { margin: 0; }
+    footer { max-width: 64rem; margin: 2rem auto; padding: 0 1.5rem; color: var(--muted); font-size: 0.8rem; }
   </style>
 </head>
 <body>
   <header>
-    <a class="brand" href="/shipments">Larkspur Track</a>
+    <a class="brand" href="/shipments">Larkspur Track{% if environment_badge %}<span class="env">{{ environment_badge }}</span>{% endif %}</a>
     {% if current_user %}
     <a href="/shipments">Shipments</a>
     <a href="/dashboard">Dashboard</a>
