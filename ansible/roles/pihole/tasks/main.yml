@@ -1,6 +1,7 @@
+# dnsutils is only a transitional name on Debian 13; installing it reported a change every run.
 - name: DNS tools for checks (dig)
   ansible.builtin.apt:
-    name: dnsutils
+    name: bind9-dnsutils
     state: present
 
 - name: Check whether Pi-hole is installed
@@ -50,7 +51,7 @@
     before="$(pihole-FTL --config {{ item.key }})"
     pihole-FTL --config {{ item.key }} {{ (item.value | to_json if item.value is iterable and item.value is not string else item.value | string) | quote }} > /dev/null
     after="$(pihole-FTL --config {{ item.key }})"
-    if [ "$before" = "$after" ]; then echo unchanged; else echo changed; fi
+    if [ "$before" = "$after" ]; then echo same; else echo updated; fi
   args:
     executable: /bin/bash
   loop: "{{ pihole_settings | dict2items }}"
@@ -58,7 +59,7 @@
     label: "{{ item.key }}"
   register: pihole_setting
   # FTL applies a setting set through its CLI at once; no restart needed.
-  changed_when: "'changed' in pihole_setting.stdout"
+  changed_when: pihole_setting.stdout == 'updated'
 
 - name: Local name resolves through Pi-hole
   ansible.builtin.command: dig +short @127.0.0.1 {{ pihole_check_name }}
