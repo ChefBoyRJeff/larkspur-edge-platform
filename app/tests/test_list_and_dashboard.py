@@ -1,6 +1,6 @@
-"""The shipment list's filters, sorting, pages and CSV export."""
+"""The shipment list's filters, sorting, pages and CSV export, and the dashboard's figures."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import update
 from sqlalchemy.orm import Session
@@ -11,10 +11,14 @@ from larkspur_track.listing import parse_list_request, shipments_csv
 from larkspur_track.models import Shipment, ShipmentEvent
 from larkspur_track.queries import (
     ShipmentFilter,
+    activity_since,
     count_shipments,
+    daily_flow,
+    oldest_waiting,
     search_shipments,
 )
-from larkspur_track.services import create_shipment
+from larkspur_track.services import StepDetails, advance_shipment, create_shipment
+from larkspur_track.workflow import ShipmentStatus
 
 ZONE = "America/New_York"
 
@@ -90,6 +94,24 @@ def test_csv_neutralises_formulas(db_session: Session) -> None:
     assert lines[1].endswith("2026-11-02T10:00:00-05:00")
 
 
+def test_daily_flow_and_activity(db_session: Session, step_details: StepDetails) -> None:
+    now = datetime(2026, 11, 20, 17, 0, tzinfo=UTC)
+    old = _add(db_session, "LRK-F-1", now - timedelta(days=20))
+    recent = _add(db_session, "LRK-F-2", now - timedelta(days=1))
+    for target in (ShipmentStatus.STORED, ShipmentStatus.PICKED, ShipmentStatus.SHIPPED):
+        event = advance_shipment(db_session, recent.id, target, details=step_details)
+        event.occurred_at = now - timedelta(hours=2)
+    db_session.flush()
+
+    flow = daily_flow(db_session, ZONE, date(2026, 11, 20))
+
+    assert len(flow) == 14 and flow[-1].day == date(2026, 11, 20)
+    assert (flow[-2].received, flow[-1].shipped) == (1, 1)
+    assert sum(day.received for day in flow) == 1  # the 20-day-old one is outside the window
+    assert activity_since(db_session, now - timedelta(hours=3))[ShipmentStatus.SHIPPED] == 1
+    assert _numbers(oldest_waiting(db_session)) == [old.tracking_number]
+
+
 def test_list_page_and_csv_download(client: SignedInClient) -> None:
     for number in range(27):
         client.post(
@@ -110,3 +132,14 @@ def test_list_page_and_csv_download(client: SignedInClient) -> None:
     assert "LRK-P-026" in second and "LRK-P-000" not in second
     assert export.headers["content-type"].startswith("text/csv")
     assert len(export.text.splitlines()) == 28
+
+
+def test_dashboard_shows_the_new_sections(client: SignedInClient) -> None:
+    client.post(
+        "/shipments", data={"tracking_number": "LRK-DB-1", "consignee": "A", "destination": "B"}
+    )
+
+    page = client.get("/dashboard").text
+
+    assert "Received and shipped, last 14 days" in page
+    assert "Waiting longest" in page and "LRK-DB-1" in page

@@ -2,10 +2,61 @@
 {% block title %}Dashboard · Larkspur Track{% endblock %}
 {% block content %}
 <h1>Dashboard</h1>
-<p>{{ total }} shipment{{ "" if total == 1 else "s" }} in total.</p>
+<p class="muted">{{ total }} shipment{{ "" if total == 1 else "s" }} in total. Times are {{ now.tzname() }}.</p>
 <div class="cards">
 {% for status, count in counts.items() %}
   <a class="card" href="/shipments?status={{ status }}"><span class="count">{{ count }}</span><span>{{ status }}</span></a>
 {% endfor %}
 </div>
+
+<section>
+<h2>Today</h2>
+<p>
+{% for status, count in today.items() %}<strong>{{ count }}</strong> {{ status }}{% if not loop.last %} · {% endif %}{% endfor %}
+</p>
+</section>
+
+<section>
+<h2>Received and shipped, last 14 days</h2>
+<p class="muted"><span class="key received"></span> received &nbsp; <span class="key shipped"></span> shipped</p>
+<table class="flow">
+  <thead><tr><th>Day</th><th class="bars">Shipments</th><th>Received</th><th>Shipped</th></tr></thead>
+  <tbody>
+  {% for day in flow | reverse %}
+    <tr>
+      <td class="nowrap">{{ day.day.strftime("%a %m-%d") }}</td>
+      <td class="bars">
+        <span class="bar received" style="width: {{ (100 * day.received / flow_max) | round(1) }}%"></span>
+        <span class="bar shipped" style="width: {{ (100 * day.shipped / flow_max) | round(1) }}%"></span>
+      </td>
+      <td>{{ day.received }}</td>
+      <td>{{ day.shipped }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</section>
+
+<section>
+<h2>Waiting longest</h2>
+{% if waiting %}
+<table>
+  <thead><tr><th>Tracking number</th><th>Customer</th><th>Status</th><th>Bin</th><th>Received</th><th>Waiting</th></tr></thead>
+  <tbody>
+  {% for shipment in waiting %}
+    <tr>
+      <td class="nowrap"><a href="/shipments/{{ shipment.id }}">{{ shipment.tracking_number }}</a></td>
+      <td>{{ shipment.customer.name }}</td>
+      <td class="nowrap"><span class="status {{ shipment.status }}">{{ shipment.status }}</span></td>
+      <td class="nowrap">{{ shipment.bin.code if shipment.bin else "" }}</td>
+      <td>{{ shipment.created_at | local_time }}</td>
+      <td class="nowrap">{{ shipment.created_at | age(now) }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>Nothing is waiting: every shipment has shipped.</p>
+{% endif %}
+</section>
 {% endblock %}

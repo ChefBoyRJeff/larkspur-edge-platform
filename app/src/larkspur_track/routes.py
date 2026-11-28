@@ -1,7 +1,7 @@
 """Server-rendered shipment pages. Changes use POST, then redirect, so a refresh never resubmits."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, time
 from typing import Annotated
 from zoneinfo import ZoneInfo
 
@@ -19,9 +19,12 @@ from larkspur_track.listing import ListRequest, parse_list_request, query_string
 from larkspur_track.models import LocationKind, Shipment
 from larkspur_track.queries import (
     PAGE_SIZE,
+    activity_since,
     count_by_status,
     count_shipments,
+    daily_flow,
     export_shipments,
+    oldest_waiting,
     search_shipments,
 )
 from larkspur_track.roles import has_role
@@ -154,8 +157,20 @@ def export_csv(request: Request, session: SessionDep) -> Response:
 
 @router.get("/dashboard")
 def dashboard(request: Request, session: SessionDep) -> HTMLResponse:
+    zone = get_settings().display_timezone
+    now = datetime.now(ZoneInfo(zone))
     counts = count_by_status(session)
-    return render(request, "dashboard.html", {"counts": counts, "total": sum(counts.values())})
+    flow = daily_flow(session, zone, now.date())
+    context = {
+        "counts": counts,
+        "total": sum(counts.values()),
+        "flow": flow,
+        "flow_max": max([1, *(max(day.received, day.shipped) for day in flow)]),
+        "waiting": oldest_waiting(session),
+        "today": activity_since(session, datetime.combine(now.date(), time(), tzinfo=now.tzinfo)),
+        "now": now,
+    }
+    return render(request, "dashboard.html", context)
 
 
 def _new_page(

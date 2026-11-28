@@ -3,12 +3,12 @@
 import uuid
 from collections.abc import Iterator
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import Date, Select, cast, func, or_, select
 from sqlalchemy.orm import Session
 
-from larkspur_track.models import Customer, Location, Shipment
+from larkspur_track.models import Customer, Location, Shipment, ShipmentEvent
 from larkspur_track.workflow import ShipmentStatus
 
 PAGE_SIZE = 25
@@ -91,6 +91,62 @@ def count_by_status(session: Session) -> dict[ShipmentStatus, int]:
     """Number of shipments in each status, including statuses with none."""
     counts = dict.fromkeys(ShipmentStatus, 0)
     rows = session.execute(select(Shipment.status, func.count()).group_by(Shipment.status))
+    for status, count in rows:
+        counts[status] = count
+    return counts
+
+
+@dataclass(frozen=True)
+class DayFlow:
+    day: date
+    received: int
+    shipped: int
+
+
+def daily_flow(session: Session, zone: str, today: date, days: int = 14) -> list[DayFlow]:
+    """Shipments received and shipped on each of the last `days` local days, oldest first."""
+    first = today - timedelta(days=days - 1)
+    local_day = cast(func.timezone(zone, ShipmentEvent.occurred_at), Date)
+    rows = session.execute(
+        select(local_day, ShipmentEvent.to_status, func.count())
+        .where(
+            local_day >= first,
+            ShipmentEvent.to_status.in_([ShipmentStatus.RECEIVED, ShipmentStatus.SHIPPED]),
+        )
+        .group_by(local_day, ShipmentEvent.to_status)
+    )
+    counts: dict[tuple[date, ShipmentStatus], int] = {
+        (day, status): count for day, status, count in rows
+    }
+    return [
+        DayFlow(
+            day=day,
+            received=counts.get((day, ShipmentStatus.RECEIVED), 0),
+            shipped=counts.get((day, ShipmentStatus.SHIPPED), 0),
+        )
+        for day in (first + timedelta(days=offset) for offset in range(days))
+    ]
+
+
+def oldest_waiting(session: Session, limit: int = 5) -> list[Shipment]:
+    """Shipments not yet shipped, longest in the warehouse first."""
+    statement = (
+        select(Shipment)
+        .where(Shipment.status != ShipmentStatus.SHIPPED)
+        .order_by(Shipment.created_at, Shipment.tracking_number)
+        .limit(limit)
+    )
+    return list(session.scalars(statement))
+
+
+def activity_since(session: Session, start: datetime) -> dict[ShipmentStatus, int]:
+    """How many shipments reached each status since `start` (the dashboard uses local midnight)."""
+    counts = dict.fromkeys(ShipmentStatus, 0)
+    rows = session.execute(
+        select(ShipmentEvent.to_status, func.count())
+        .where(ShipmentEvent.occurred_at >= start)
+        .group_by(ShipmentEvent.to_status)
+    )
     for status, count in rows:
         counts[status] = count
     return counts

@@ -55,6 +55,11 @@
     form.search select.wide { width: 14rem; }
     form.search input.date { width: 10rem; }
     .pager { display: flex; gap: 1.5rem; align-items: center; margin-top: 1rem; }
+    table.flow td.bars, table.flow th.bars { width: 55%; }
+    .bar { display: block; height: 0.55rem; border-radius: 0.2rem; margin: 0.1rem 0; min-width: 1px; }
+    .bar.received, .key.received { background: var(--navy); }
+    .bar.shipped, .key.shipped { background: var(--gold); }
+    .key { display: inline-block; width: 0.8rem; height: 0.8rem; border-radius: 0.15rem; vertical-align: middle; }
     .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 1rem; }
     .card { background: #fff; border-radius: 0.5rem; padding: 1rem; text-decoration: none; color: inherit;
       border: 1px solid var(--gray-light); border-top: 4px solid var(--gold); }

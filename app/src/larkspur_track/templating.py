@@ -39,7 +39,20 @@ def local_time(value: datetime) -> str:
     return value.astimezone(zone).strftime("%m-%d-%Y %I:%M %p %Z")
 
 
+def age(value: datetime, now: datetime) -> str:
+    """How long ago, roughly: 3 d 4 h, 5 h 10 min, or 12 min."""
+    minutes = max(0, int((now - value).total_seconds() // 60))
+    days, rest = divmod(minutes, 24 * 60)
+    hours, minutes = divmod(rest, 60)
+    if days:
+        return f"{days} d {hours} h"
+    if hours:
+        return f"{hours} h {minutes} min"
+    return f"{minutes} min"
+
+
 templates.env.filters["local_time"] = local_time
+templates.env.filters["age"] = age
 
 
 def render(
