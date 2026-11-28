@@ -34,6 +34,7 @@ class AuditAction(StrEnum):
     LOCATION_ADDED = "location_added"
     SETUP_DEACTIVATED = "setup_deactivated"
     SETUP_REACTIVATED = "setup_reactivated"
+    SAMPLE_DATA_ADDED = "sample_data_added"
 
 
 def client_address(request: Request) -> str | None:

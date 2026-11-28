@@ -1,28 +1,48 @@
-"""Read-only shipment queries for search and the dashboard."""
+"""Read-only shipment queries for the shipment list, its CSV export and the dashboard."""
 
-from sqlalchemy import func, or_, select
+import uuid
+from collections.abc import Iterator
+from dataclasses import dataclass
+from datetime import date, datetime, timedelta
+
+from sqlalchemy import Date, Select, cast, func, or_, select
 from sqlalchemy.orm import Session
 
-from larkspur_track.models import Location, Shipment
+from larkspur_track.models import Customer, Location, Shipment, ShipmentEvent
 from larkspur_track.workflow import ShipmentStatus
 
-SEARCH_LIMIT = 50
+PAGE_SIZE = 25
+EXPORT_LIMIT = 10_000
+SORTS = {
+    "newest": (Shipment.created_at.desc(), Shipment.tracking_number),
+    "oldest": (Shipment.created_at, Shipment.tracking_number),
+    "tracking": (Shipment.tracking_number,),
+    "customer": (Customer.name, Shipment.created_at.desc()),
+    "status": (Shipment.status, Shipment.created_at.desc()),
+}
 
 
-def search_shipments(
-    session: Session,
-    *,
-    query: str = "",
-    status: ShipmentStatus | None = None,
-    limit: int = SEARCH_LIMIT,
-) -> list[Shipment]:
-    """Newest shipments first, matching the text (tracking number, consignee or bin) and status.
+@dataclass(frozen=True)
+class ShipmentFilter:
+    """What the shipment list shows. Received times are bounds in UTC: from inclusive, before
+    exclusive (the page turns the chosen local days into these)."""
 
-    The text match ignores case, and % or _ in the text are matched literally, not as wildcards.
-    """
-    statement = select(Shipment).outerjoin(Location, Shipment.bin_id == Location.id)
-    text = query.strip()
+    query: str = ""
+    status: ShipmentStatus | None = None
+    customer_id: uuid.UUID | None = None
+    received_from: datetime | None = None
+    received_before: datetime | None = None
+
+
+def _filtered(filters: ShipmentFilter) -> Select[tuple[Shipment]]:
+    statement = (
+        select(Shipment)
+        .join(Customer, Shipment.customer_id == Customer.id)
+        .outerjoin(Location, Shipment.bin_id == Location.id)
+    )
+    text = filters.query.strip()
     if text:
+        # Ignores case; % and _ in the text match literally, not as wildcards.
         statement = statement.where(
             or_(
                 Shipment.tracking_number.icontains(text, autoescape=True),
@@ -30,16 +50,103 @@ def search_shipments(
                 Location.code.icontains(text, autoescape=True),
             )
         )
-    if status is not None:
-        statement = statement.where(Shipment.status == status)
-    newest_first = statement.order_by(Shipment.created_at.desc(), Shipment.tracking_number)
-    return list(session.scalars(newest_first.limit(limit)))
+    if filters.status is not None:
+        statement = statement.where(Shipment.status == filters.status)
+    if filters.customer_id is not None:
+        statement = statement.where(Shipment.customer_id == filters.customer_id)
+    if filters.received_from is not None:
+        statement = statement.where(Shipment.created_at >= filters.received_from)
+    if filters.received_before is not None:
+        statement = statement.where(Shipment.created_at < filters.received_before)
+    return statement
+
+
+def search_shipments(
+    session: Session,
+    filters: ShipmentFilter | None = None,
+    *,
+    sort: str = "newest",
+    limit: int = PAGE_SIZE,
+    offset: int = 0,
+) -> list[Shipment]:
+    """One page of matching shipments; an unknown sort falls back to newest first."""
+    order = SORTS.get(sort, SORTS["newest"])
+    statement = _filtered(filters or ShipmentFilter()).order_by(*order)
+    return list(session.scalars(statement.limit(limit).offset(offset)))
+
+
+def count_shipments(session: Session, filters: ShipmentFilter | None = None) -> int:
+    subquery = _filtered(filters or ShipmentFilter()).subquery()
+    return session.scalar(select(func.count()).select_from(subquery)) or 0
+
+
+def export_shipments(
+    session: Session, filters: ShipmentFilter | None = None, *, sort: str = "newest"
+) -> Iterator[Shipment]:
+    """Every matching shipment for the CSV export, up to EXPORT_LIMIT rows."""
+    yield from search_shipments(session, filters, sort=sort, limit=EXPORT_LIMIT)
 
 
 def count_by_status(session: Session) -> dict[ShipmentStatus, int]:
     """Number of shipments in each status, including statuses with none."""
     counts = dict.fromkeys(ShipmentStatus, 0)
     rows = session.execute(select(Shipment.status, func.count()).group_by(Shipment.status))
+    for status, count in rows:
+        counts[status] = count
+    return counts
+
+
+@dataclass(frozen=True)
+class DayFlow:
+    day: date
+    received: int
+    shipped: int
+
+
+def daily_flow(session: Session, zone: str, today: date, days: int = 14) -> list[DayFlow]:
+    """Shipments received and shipped on each of the last `days` local days, oldest first."""
+    first = today - timedelta(days=days - 1)
+    local_day = cast(func.timezone(zone, ShipmentEvent.occurred_at), Date)
+    rows = session.execute(
+        select(local_day, ShipmentEvent.to_status, func.count())
+        .where(
+            local_day >= first,
+            ShipmentEvent.to_status.in_([ShipmentStatus.RECEIVED, ShipmentStatus.SHIPPED]),
+        )
+        .group_by(local_day, ShipmentEvent.to_status)
+    )
+    counts: dict[tuple[date, ShipmentStatus], int] = {
+        (day, status): count for day, status, count in rows
+    }
+    return [
+        DayFlow(
+            day=day,
+            received=counts.get((day, ShipmentStatus.RECEIVED), 0),
+            shipped=counts.get((day, ShipmentStatus.SHIPPED), 0),
+        )
+        for day in (first + timedelta(days=offset) for offset in range(days))
+    ]
+
+
+def oldest_waiting(session: Session, limit: int = 5) -> list[Shipment]:
+    """Shipments not yet shipped, longest in the warehouse first."""
+    statement = (
+        select(Shipment)
+        .where(Shipment.status != ShipmentStatus.SHIPPED)
+        .order_by(Shipment.created_at, Shipment.tracking_number)
+        .limit(limit)
+    )
+    return list(session.scalars(statement))
+
+
+def activity_since(session: Session, start: datetime) -> dict[ShipmentStatus, int]:
+    """How many shipments reached each status since `start` (the dashboard uses local midnight)."""
+    counts = dict.fromkeys(ShipmentStatus, 0)
+    rows = session.execute(
+        select(ShipmentEvent.to_status, func.count())
+        .where(ShipmentEvent.occurred_at >= start)
+        .group_by(ShipmentEvent.to_status)
+    )
     for status, count in rows:
         counts[status] = count
     return counts

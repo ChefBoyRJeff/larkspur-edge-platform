@@ -119,7 +119,7 @@ Pi-hole on lark-dns-01 answers for `larkspur.home.arpa` (the sites at 192.168.1.
 
 Releases are pull requests that change the image tag; rollbacks are reverts. See [docs/runbooks/release-and-rollback.md](docs/runbooks/release-and-rollback.md).
 
-Each shipment belongs to a customer (the company the warehouse handles goods for). Storing it records a bin (for example `A-03-2`), and picking it records a dock door and the carrier that collects it; search also finds shipments by bin. Supervisors manage customers, carriers, bins and dock doors on the Setup page. Dev shows a DEV badge in the header.
+Each shipment belongs to a customer (the company the warehouse handles goods for). Storing it records a bin (for example `A-03-2`), and picking it records a dock door and the carrier that collects it; search also finds shipments by bin. Supervisors manage customers, carriers, bins and dock doors on the Setup page. Dev shows a DEV badge in the header. The shipment list filters by status, customer and received date, sorts, pages 25 at a time and downloads the filtered list as CSV. The Dashboard shows shipments by status, today's activity, received and shipped per day for 14 days, and the shipments waiting longest. Sample users and a shipment history can be added once per environment with `platform/sample-data/add-sample-data.ps1` (see the user administration runbook).
 
 Both environments require sign-in, with clerk, supervisor and admin roles and an append-only audit log (ADR-0006). Users are managed on the Users page; see [docs/runbooks/user-administration.md](docs/runbooks/user-administration.md).
 
@@ -144,7 +144,7 @@ Dashboards: https://grafana.larkspur.home.arpa (**Larkspur Track** shows the SLO
 |---|---|
 | ansible/ | Node configuration: inventory, roles (common, k3s_server, k3s_agent, pihole), site.yml (configure), promote-to-server.yml, patch.yml (rolling OS updates) |
 | app/ | Larkspur Track (FastAPI, Jinja2, PostgreSQL) and its sync worker: uv project, source in src/larkspur_track/, tests in tests/ |
-| platform/ | GitOps manifests: bootstrap/ (root app), apps/ (Argo CD Applications), drills/ (restore, uplink-cut and node-loss drills, not synced), argocd/ (Argo CD Helm values), alertmanager/ (alert email template and sealing script), config/ (CA issuers, app namespaces and guardrails, databases and their monitoring, sealed sync credentials, Traefik settings, monitoring rules and dashboards, HTTPS test page) |
+| platform/ | GitOps manifests: bootstrap/ (root app), apps/ (Argo CD Applications), drills/ (restore, uplink-cut and node-loss drills, not synced), sample-data/ (sample users and shipments script, not synced), argocd/ (Argo CD Helm values), alertmanager/ (alert email template and sealing script), config/ (CA issuers, app namespaces and guardrails, databases and their monitoring, sealed sync credentials, Traefik settings, monitoring rules and dashboards, HTTPS test page) |
 | charts/ | Helm chart for Larkspur Track (web Deployment, sync worker, migration job, Service, Ingress, Certificate, network policies, ServiceMonitor and PodMonitor, alert rules) with per-environment values |
 | azure/ | Bicep and scripts for the Azure side: backup storage and sync queues, budgets, per-environment backup and sync credentials |
 | docs/ | Plan, [install guide](docs/install.md) (rebuild from blank SD cards), [architecture decision records](docs/adr/README.md), runbooks, [interview guide](docs/interview-guide.md), [release notes](docs/releases/v1.0.0.md), AI-use log |

@@ -1,7 +1,9 @@
 """Server-rendered shipment pages. Changes use POST, then redirect, so a refresh never resubmits."""
 
 import uuid
+from datetime import datetime, time
 from typing import Annotated
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -11,9 +13,20 @@ from sqlalchemy.orm import Session
 from larkspur_track.audit import AuditAction, record_by
 from larkspur_track.auth import RoleRequired, SessionDep, SignedIn, require_signed_in
 from larkspur_track.catalog import carriers, customers, locations
+from larkspur_track.config import get_settings
 from larkspur_track.forms import clean_note, parse_shipment_form, parse_uuid
+from larkspur_track.listing import ListRequest, parse_list_request, query_string, shipments_csv
 from larkspur_track.models import LocationKind, Shipment
-from larkspur_track.queries import SEARCH_LIMIT, count_by_status, search_shipments
+from larkspur_track.queries import (
+    PAGE_SIZE,
+    activity_since,
+    count_by_status,
+    count_shipments,
+    daily_flow,
+    export_shipments,
+    oldest_waiting,
+    search_shipments,
+)
 from larkspur_track.roles import has_role
 from larkspur_track.services import (
     ShipmentNotFoundError,
@@ -78,30 +91,86 @@ def home() -> RedirectResponse:
     return RedirectResponse("/shipments", status_code=303)
 
 
+def _list_request(request: Request) -> ListRequest:
+    values = request.query_params
+    return parse_list_request(
+        q=values.get("q", ""),
+        status=values.get("status", ""),
+        customer=values.get("customer", ""),
+        received_from=values.get("from", ""),
+        received_to=values.get("to", ""),
+        sort=values.get("sort", ""),
+        page=values.get("page", "1"),
+        zone=get_settings().display_timezone,
+    )
+
+
+SORT_LABELS = {
+    "newest": "Newest first",
+    "oldest": "Oldest first",
+    "tracking": "Tracking number",
+    "customer": "Customer",
+    "status": "Status",
+}
+
+
 @router.get("/shipments")
-def list_shipments(
-    request: Request, session: SessionDep, q: str = "", status: str = ""
-) -> HTMLResponse:
-    query = q.strip()[:100]
-    try:
-        status_filter = ShipmentStatus(status) if status else None
-    except ValueError:
-        status_filter = None
-    shipments = search_shipments(session, query=query, status=status_filter)
+def list_shipments(request: Request, session: SessionDep) -> HTMLResponse:
+    chosen = _list_request(request)
+    total = count_shipments(session, chosen.filters)
+    pages = max(1, -(-total // PAGE_SIZE))
+    page = min(chosen.page, pages)
+    shipments = search_shipments(
+        session, chosen.filters, sort=chosen.sort, offset=(page - 1) * PAGE_SIZE
+    )
+    params = chosen.params
     context = {
         "shipments": shipments,
-        "q": query,
-        "status": status_filter,
+        "total": total,
+        "page": page,
+        "pages": pages,
+        "first_row": (page - 1) * PAGE_SIZE + 1,
+        "params": params,
+        "filtered": any(key != "sort" for key in params),
         "statuses": list(ShipmentStatus),
-        "limit": SEARCH_LIMIT,
+        "customers": customers(session),
+        "sorts": SORT_LABELS,
+        "previous_link": query_string(params, page=page - 1) if page > 1 else "",
+        "next_link": query_string(params, page=page + 1) if page < pages else "",
+        "csv_link": query_string(params),
     }
     return render(request, "shipments/list.html", context)
 
 
+@router.get("/shipments.csv")
+def export_csv(request: Request, session: SessionDep) -> Response:
+    chosen = _list_request(request)
+    zone = get_settings().display_timezone
+    body = shipments_csv(list(export_shipments(session, chosen.filters, sort=chosen.sort)), zone)
+    stamp = datetime.now(ZoneInfo(zone)).strftime("%Y%m%d-%H%M")
+    return Response(
+        body,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="shipments-{stamp}.csv"'},
+    )
+
+
 @router.get("/dashboard")
 def dashboard(request: Request, session: SessionDep) -> HTMLResponse:
+    zone = get_settings().display_timezone
+    now = datetime.now(ZoneInfo(zone))
     counts = count_by_status(session)
-    return render(request, "dashboard.html", {"counts": counts, "total": sum(counts.values())})
+    flow = daily_flow(session, zone, now.date())
+    context = {
+        "counts": counts,
+        "total": sum(counts.values()),
+        "flow": flow,
+        "flow_max": max([1, *(max(day.received, day.shipped) for day in flow)]),
+        "waiting": oldest_waiting(session),
+        "today": activity_since(session, datetime.combine(now.date(), time(), tzinfo=now.tzinfo)),
+        "now": now,
+    }
+    return render(request, "dashboard.html", context)
 
 
 def _new_page(
