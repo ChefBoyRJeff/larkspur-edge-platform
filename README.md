@@ -119,6 +119,8 @@ Pi-hole on lark-dns-01 answers for `larkspur.home.arpa` (the sites at 192.168.1.
 
 Releases are pull requests that change the image tag; rollbacks are reverts. See [docs/runbooks/release-and-rollback.md](docs/runbooks/release-and-rollback.md).
 
+Each shipment belongs to a customer (the company the warehouse handles goods for). Storing it records a bin (for example `A-03-2`), and picking it records a dock door and the carrier that collects it; search also finds shipments by bin. Supervisors manage customers, carriers, bins and dock doors on the Setup page. Dev shows a DEV badge in the header.
+
 Both environments require sign-in, with clerk, supervisor and admin roles and an append-only audit log (ADR-0006). Users are managed on the Users page; see [docs/runbooks/user-administration.md](docs/runbooks/user-administration.md).
 
 ## Backups
