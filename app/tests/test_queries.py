@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 
 from larkspur_track.models import Shipment
-from larkspur_track.queries import count_by_status, search_shipments
+from larkspur_track.queries import ShipmentFilter, count_by_status, search_shipments
 from larkspur_track.services import StepDetails, advance_shipment, create_shipment
 from larkspur_track.workflow import ShipmentStatus
 
@@ -20,16 +20,20 @@ def test_search_ignores_case_on_tracking_number_and_consignee(db_session: Sessio
     _add(db_session, "LRK-A-0001", "Acme Retail")
     _add(db_session, "LRK-B-0002", "Blue Ridge Foods")
 
-    assert _tracking_numbers(search_shipments(db_session, query="lrk-a")) == {"LRK-A-0001"}
-    assert _tracking_numbers(search_shipments(db_session, query="blue ridge")) == {"LRK-B-0002"}
+    assert _tracking_numbers(search_shipments(db_session, ShipmentFilter(query="lrk-a"))) == {
+        "LRK-A-0001"
+    }
+    assert _tracking_numbers(search_shipments(db_session, ShipmentFilter(query="blue ridge"))) == {
+        "LRK-B-0002"
+    }
     assert _tracking_numbers(search_shipments(db_session)) == {"LRK-A-0001", "LRK-B-0002"}
 
 
 def test_search_treats_like_wildcards_as_plain_text(db_session: Session) -> None:
     _add(db_session, "LRK-A-0001", "Acme Retail")
 
-    assert search_shipments(db_session, query="%") == []
-    assert search_shipments(db_session, query="_") == []
+    assert search_shipments(db_session, ShipmentFilter(query="%")) == []
+    assert search_shipments(db_session, ShipmentFilter(query="_")) == []
 
 
 def test_search_filters_by_status(db_session: Session, step_details: StepDetails) -> None:
@@ -38,7 +42,7 @@ def test_search_filters_by_status(db_session: Session, step_details: StepDetails
 
     advance_shipment(db_session, first.id, ShipmentStatus.STORED, details=step_details)
 
-    stored = search_shipments(db_session, status=ShipmentStatus.STORED)
+    stored = search_shipments(db_session, ShipmentFilter(status=ShipmentStatus.STORED))
     assert _tracking_numbers(stored) == {"LRK-A-0001"}
 
 

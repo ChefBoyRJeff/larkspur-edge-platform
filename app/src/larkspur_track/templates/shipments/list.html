@@ -6,21 +6,48 @@
 <form class="search" method="get" action="/shipments">
   <div>
     <label for="q">Search</label>
-    <input id="q" name="q" value="{{ q }}" placeholder="Tracking number, consignee or bin" maxlength="100">
+    <input id="q" name="q" value="{{ params.q or '' }}" placeholder="Tracking number, consignee or bin" maxlength="100">
   </div>
   <div>
     <label for="status">Status</label>
     <select id="status" name="status">
       <option value="">All</option>
       {% for option in statuses %}
-      <option value="{{ option }}"{% if option == status %} selected{% endif %}>{{ option }}</option>
+      <option value="{{ option }}"{% if option == params.status %} selected{% endif %}>{{ option }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label for="customer">Customer</label>
+    <select id="customer" name="customer" class="wide">
+      <option value="">All</option>
+      {% for customer in customers %}
+      <option value="{{ customer.id }}"{% if params.customer == customer.id|string %} selected{% endif %}>{{ customer.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label for="from">Received from</label>
+    <input id="from" name="from" type="date" value="{{ params.from or '' }}" class="date">
+  </div>
+  <div>
+    <label for="to">to</label>
+    <input id="to" name="to" type="date" value="{{ params.to or '' }}" class="date">
+  </div>
+  <div>
+    <label for="sort">Sort</label>
+    <select id="sort" name="sort">
+      {% for key, label in sorts.items() %}
+      <option value="{{ key }}"{% if key == (params.sort or 'newest') %} selected{% endif %}>{{ label }}</option>
       {% endfor %}
     </select>
   </div>
   <button type="submit">Search</button>
-  {% if q or status %}<a href="/shipments">Clear</a>{% endif %}
+  {% if filtered %}<a href="/shipments">Clear</a>{% endif %}
 </form>
 {% if shipments %}
+<p class="muted">Showing {{ first_row }}–{{ first_row + shipments | length - 1 }} of {{ total }}.
+  <a href="/shipments.csv{% if csv_link %}?{{ csv_link }}{% endif %}">Download CSV</a> (all {{ total }}{% if total > 10000 %}, first 10,000{% endif %})</p>
 <table>
   <thead><tr><th>Tracking number</th><th>Customer</th><th>Consignee</th><th>Destination</th><th>Status</th><th>Bin</th><th>Received</th></tr></thead>
   <tbody>
@@ -37,8 +64,14 @@
   {% endfor %}
   </tbody>
 </table>
-{% if shipments | length == limit %}<p>Showing the newest {{ limit }}. Search to narrow the list.</p>{% endif %}
-{% elif q or status %}
+{% if pages > 1 %}
+<nav class="pager" aria-label="Pages">
+  {% if previous_link %}<a href="/shipments?{{ previous_link }}">&larr; Previous</a>{% endif %}
+  <span>Page {{ page }} of {{ pages }}</span>
+  {% if next_link %}<a href="/shipments?{{ next_link }}">Next &rarr;</a>{% endif %}
+</nav>
+{% endif %}
+{% elif filtered %}
 <p>No shipments match.</p>
 {% else %}
 <p>No shipments yet.</p>
