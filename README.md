@@ -2,15 +2,18 @@
 
 [![CI](https://github.com/ChefBoyRJeff/larkspur-edge-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/ChefBoyRJeff/larkspur-edge-platform/actions/workflows/ci.yml)
 
-**Larkspur Track**: an offline-first shipment tracking system for a (fictional) Larkspur Logistics regional warehouse, running on a 2-node **k3s** Kubernetes cluster of Raspberry Pi 5s, built and operated with production practices: Ansible, GitHub Actions, Argo CD (GitOps), cert-manager, Sealed Secrets, CloudNativePG, Prometheus/Grafana, and Azure for off-site backups and sync.
+**Larkspur Track**: an offline-first shipment tracking system for a (fictional) Larkspur Logistics regional warehouse, running on a three-server **k3s** Kubernetes cluster of Raspberry Pis that survives losing any one node, built and operated with production practices: Ansible, GitHub Actions, Argo CD (GitOps), cert-manager, Sealed Secrets, CloudNativePG, Prometheus/Grafana, and Azure for off-site backups and sync.
 
-> **Status:** Foundation, Infrastructure, Platform, CI/CD, Application, Operations (monitoring), Data (backups), Integration (offline-first sync), Operations drills and Release done: **v1.0.0** ([release notes](docs/releases/v1.0.0.md)). See [docs/plan.md](docs/plan.md).
+> **Status:** v1.0.0 released ([release notes](docs/releases/v1.0.0.md)). Phase 2, Module 1 (high availability and site DNS) done. See [docs/plan.md](docs/plan.md).
 
 | Host | Hardware | Role |
 |---|---|---|
 | lark-sw01 | NETGEAR GS748Tv3 (managed) | Site switch |
-| lark-k3s-01 | Raspberry Pi 5, 8 GB | k3s control plane + workloads |
-| lark-k3s-02 | Raspberry Pi 5, 8 GB | k3s worker |
+| lark-k3s-01 | Raspberry Pi 5, 8 GB | k3s server (etcd) + workloads |
+| lark-k3s-02 | Raspberry Pi 5, 8 GB | k3s server (etcd) + workloads |
+| lark-k3s-03 | Raspberry Pi 4, 4 GB | k3s server (etcd) + workloads |
+| lark-dns-01 | Raspberry Pi 4, 4 GB | Pi-hole: DNS for `larkspur.home.arpa` |
+| (shared address) | 192.168.1.50 | Kubernetes API and the sites, held by kube-vip on one server at a time |
 
 ## Architecture
 
@@ -29,10 +32,12 @@ flowchart LR
   ghcr[("GHCR<br/>larkspur-track:sha-commit")]
 
   subgraph SITE["Home network, lark-sw01 switch"]
-    subgraph NODES["Raspberry Pi 5 nodes"]
-      n1["lark-k3s-01<br/>control plane + workloads"]
-      n2["lark-k3s-02<br/>worker"]
+    subgraph NODES["k3s servers (etcd), API at 192.168.1.50 (kube-vip)"]
+      n1["lark-k3s-01<br/>Pi 5"]
+      n2["lark-k3s-02<br/>Pi 5"]
+      n3["lark-k3s-03<br/>Pi 4"]
     end
+    dns["lark-dns-01<br/>Pi-hole"]
     subgraph K3S["k3s cluster"]
       argocd["Argo CD<br/>app-of-apps, self-managed"]
       cm["cert-manager<br/>larkspur-ca issuer"]
@@ -48,12 +53,12 @@ flowchart LR
       subgraph DEVNS["larkspur-dev"]
         devapp["Larkspur Track<br/>2 replicas"]
         devsync["Sync worker"]
-        devdb[("larkspur-db<br/>PostgreSQL 18<br/>+ outbox")]
+        devdb[("larkspur-db<br/>PostgreSQL 18, 2 instances<br/>+ outbox")]
       end
       subgraph PRODNS["larkspur-prod"]
         prodapp["Larkspur Track<br/>2 replicas"]
         prodsync["Sync worker"]
-        proddb[("larkspur-db<br/>PostgreSQL 18<br/>+ outbox")]
+        proddb[("larkspur-db<br/>PostgreSQL 18, 2 instances<br/>+ outbox")]
       end
     end
   end
@@ -78,6 +83,9 @@ flowchart LR
   prodsync -->|"HTTPS, send-only SAS"| queue
   wsl -->|"SSH: site.yml, patch.yml"| n1
   wsl -->|"SSH"| n2
+  wsl -->|"SSH"| n3
+  wsl -->|"SSH: Pi-hole role"| dns
+  browser -->|"*.larkspur.home.arpa names (NRPT)"| dns
   browser -->|"HTTPS"| traefik
   traefik -->|"track-dev.larkspur.home.arpa"| devapp
   traefik -->|"track.larkspur.home.arpa"| prodapp
@@ -88,12 +96,20 @@ flowchart LR
   bbx -->|"HTTPS, like a browser"| traefik
   prom -->|"alerts"| am
   am -->|"email"| gmail(["Gmail"])
+  am -->|"Watchdog every minute"| hc(["healthchecks.io<br/>dead man's switch"])
+  hc -->|"email if pings stop"| gmail
   browser -->|"grafana.larkspur.home.arpa"| traefik
   traefik --> grafana
   grafana -.->|"queries"| prom
 ```
 
 Both app namespaces enforce the `restricted` Pod Security profile, deny all network traffic by default (DNS excepted), and give the `larkspur-developers` group edit access in dev and read-only access in prod. Network policies admit only Traefik to the app and only the app to its database.
+
+## High availability
+All three nodes are k3s servers with embedded etcd, so the cluster survives losing any one of them; kube-vip moves the API address (192.168.1.50) to a healthy server. Each database runs a primary and a streaming replica on different nodes, and the components that fail it over or report it (the database operator and its backup plugin, Alertmanager, the page checks) run on two nodes. Measured in node-loss drills on 11-27-2026: losing the node with both database primaries took prod down for 11 min 6 s before these changes and about 90 s after (86 and 93 s), with a further 36-48 s gap at the 5-minute mark caused by etcd on SD cards. Design and drill results: [ADR-0010](docs/adr/0010-high-availability.md); procedures: [control plane](docs/runbooks/control-plane.md), [losing a node](docs/runbooks/replace-a-node.md).
+
+## Site DNS
+Pi-hole on lark-dns-01 answers for `larkspur.home.arpa` (the sites at 192.168.1.50, each Pi at its own address) and forwards everything else to Quad9. The admin PC sends only those names to it through a Windows NRPT rule, so no hosts-file entries are needed. Ansible installs and configures it. Design: [ADR-0011](docs/adr/0011-site-dns.md); procedures: [docs/runbooks/dns.md](docs/runbooks/dns.md).
 
 ## Environments
 | Environment | URL | Namespace | Release (image tag) set in |
@@ -112,7 +128,7 @@ Each database archives every change (WAL) to its own private container in Azure 
 Every shipment change is saved together with an event in an outbox table, in the same transaction. A sync worker in each environment sends the events, oldest first, to that environment's Azure Storage Queue with a token that can only add messages; when the internet is down, events wait in the outbox and staff keep working. Delivery is at least once, so receivers dedupe by `event_id`. Measured in an uplink-cut drill: 7 of 7 events made during an outage (with a worker restart) reached Azure 5 seconds after the link returned, with no duplicates. Design: [ADR-0009](docs/adr/0009-offline-first-sync.md); procedures and the drill: [docs/runbooks/sync.md](docs/runbooks/sync.md). The Azure side is Bicep in `azure/integration/`.
 
 ## Monitoring
-Prometheus scrapes the app, both databases, cert-manager, the nodes and Kubernetes itself; the blackbox exporter checks each page over trusted HTTPS from inside the cluster. Alertmanager emails warning and critical alerts, each linking to its section in [docs/runbooks/alerts.md](docs/runbooks/alerts.md). Design: [ADR-0007](docs/adr/0007-monitoring-and-alerting.md).
+Prometheus scrapes the app, both databases, cert-manager, the nodes and Kubernetes itself; the blackbox exporter checks each page over trusted HTTPS from inside the cluster. Alertmanager emails warning and critical alerts, each linking to its section in [docs/runbooks/alerts.md](docs/runbooks/alerts.md); a healthchecks.io dead man's switch emails if alerting itself stops. Design: [ADR-0007](docs/adr/0007-monitoring-and-alerting.md).
 
 | SLO (prod, rolling 7 days, health checks excluded) | Target |
 |---|---|
@@ -124,9 +140,9 @@ Dashboards: https://grafana.larkspur.home.arpa (**Larkspur Track** shows the SLO
 ## Repository layout
 | Path | Contents |
 |---|---|
-| ansible/ | Node configuration: inventory, roles (common, k3s_server, k3s_agent), site.yml (configure), patch.yml (rolling OS updates) |
+| ansible/ | Node configuration: inventory, roles (common, k3s_server, k3s_agent, pihole), site.yml (configure), promote-to-server.yml, patch.yml (rolling OS updates) |
 | app/ | Larkspur Track (FastAPI, Jinja2, PostgreSQL) and its sync worker: uv project, source in src/larkspur_track/, tests in tests/ |
-| platform/ | GitOps manifests: bootstrap/ (root app), apps/ (Argo CD Applications), drills/ (restore and uplink-cut drills, not synced), argocd/ (Argo CD Helm values), alertmanager/ (alert email template and sealing script), config/ (CA issuers, app namespaces and guardrails, databases and their monitoring, sealed sync credentials, Traefik settings, monitoring rules and dashboards, HTTPS test page) |
+| platform/ | GitOps manifests: bootstrap/ (root app), apps/ (Argo CD Applications), drills/ (restore, uplink-cut and node-loss drills, not synced), argocd/ (Argo CD Helm values), alertmanager/ (alert email template and sealing script), config/ (CA issuers, app namespaces and guardrails, databases and their monitoring, sealed sync credentials, Traefik settings, monitoring rules and dashboards, HTTPS test page) |
 | charts/ | Helm chart for Larkspur Track (web Deployment, sync worker, migration job, Service, Ingress, Certificate, network policies, ServiceMonitor and PodMonitor, alert rules) with per-environment values |
 | azure/ | Bicep and scripts for the Azure side: backup storage and sync queues, budgets, per-environment backup and sync credentials |
 | docs/ | Plan, [install guide](docs/install.md) (rebuild from blank SD cards), [architecture decision records](docs/adr/README.md), runbooks, [interview guide](docs/interview-guide.md), [release notes](docs/releases/v1.0.0.md), AI-use log |
