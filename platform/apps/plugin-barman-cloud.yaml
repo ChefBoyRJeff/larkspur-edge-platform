@@ -14,6 +14,19 @@ spec:
     targetRevision: 0.9.0
     helm:
       valuesObject:
+        # Two replicas on different nodes. The operator cannot reconcile a cluster, including a
+        # failover, while this plugin is unreachable (node-loss drill, 11-27-2026: failover waited
+        # until the plugin was rescheduled, about 7.5 minutes). Since v0.16.0 every replica serves
+        # the gRPC API; only the ObjectStore controller needs the leader lease.
+        replicaCount: 2
+        affinity:
+          podAntiAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              - topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: plugin-barman-cloud
+                    app.kubernetes.io/instance: plugin-barman-cloud
         resources:
           requests:
             cpu: 10m
