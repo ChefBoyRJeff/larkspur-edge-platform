@@ -143,6 +143,12 @@ kubectl get pods -n larkspur-dev -l cnpg.io/cluster=larkspur-db -o wide
 **Fix:**
 - An instance is Pending because its node is down → it returns with the node; the operator has already promoted the other one if it was the primary.
 - A new replica never becomes ready → check `allow-larkspur-db-replication` (`kubectl get networkpolicy -n larkspur-dev`) and the replica's join job logs (`kubectl logs -n larkspur-dev -l cnpg.io/jobRole=join`).
+- A former primary rejoined after a failover but stays `Running` and not ready; its log repeats `the database system is not yet accepting connections`, and `psql` in it says `Consistent recovery state has not been yet reached` → it must replay the primary's WAL just past its minimum recovery point, and an idle primary writes nothing new. Compare `kubectl exec -n larkspur-dev <replica> -c postgres -- pg_controldata /var/lib/postgresql/data/pgdata` ("Minimum recovery ending location") with `select pg_current_wal_lsn()` on the primary: if the minimum is just ahead, run a checkpoint on the primary, which writes a new WAL record:
+  ```powershell
+  $p = kubectl get cluster larkspur-db -n larkspur-dev -o jsonpath='{.status.currentPrimary}'
+  kubectl exec -n larkspur-dev $p -c postgres -- psql -tAq -c checkpoint
+  ```
+  Measured 11-27-2026 after a node-loss drill: both replicas were stuck for 14 minutes (minimum 0/24000028, primary at 0/24000000) and were ready 10 s after the checkpoint.
 - A node is gone for good → its instance's volume is gone too; delete that instance's PVC and pod and the operator builds a new replica (`docs/runbooks/replace-a-node.md`).
 ### LarkspurDatabaseNearConnectionLimit
 **Meaning:** over 80% of `max_connections` (100) have been in use for 5 minutes. New connections will soon be refused.
