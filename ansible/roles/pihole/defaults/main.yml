@@ -1,0 +1,24 @@
+# Pi-hole v6 settings, applied with `pihole-FTL --config <key> <value>` (keys as in pihole.toml).
+# Lists are passed as JSON. Change values here and rerun site.yml; nothing is edited by hand.
+pihole_installer_url: https://install.pi-hole.net
+pihole_settings:
+  # Upstream resolvers (Quad9, filtering malware domains).
+  dns.upstreams: ["9.9.9.9", "149.112.112.112"]
+  # Local names for the site; replaces the admin PC's hosts file. 192.168.1.50 is the shared
+  # address (kube-vip; Traefik answers on every node, so the sites follow it).
+  dns.hosts:
+    - "192.168.1.50 track.larkspur.home.arpa"
+    - "192.168.1.50 track-dev.larkspur.home.arpa"
+    - "192.168.1.50 grafana.larkspur.home.arpa"
+    - "192.168.1.50 test.larkspur.home.arpa"
+    - "192.168.1.50 k3s-api.larkspur.home.arpa"
+    - "192.168.1.197 lark-sw01.larkspur.home.arpa"
+    - "192.168.1.199 lark-k3s-01.larkspur.home.arpa"
+    - "192.168.1.200 lark-k3s-02.larkspur.home.arpa"
+    - "192.168.1.201 lark-k3s-03.larkspur.home.arpa"
+    - "192.168.1.202 lark-dns-01.larkspur.home.arpa"
+  # Write the query database to the SD card hourly instead of every minute.
+  database.DBinterval: 3600
+# Checked after every run: name -> expected address.
+pihole_check_name: track.larkspur.home.arpa
+pihole_check_address: 192.168.1.50

@@ -18,3 +18,9 @@
   become: true
   roles:
     - k3s_agent
+
+- name: Site DNS (Pi-hole)
+  hosts: site_services
+  become: true
+  roles:
+    - pihole

@@ -1,0 +1,71 @@
+- name: DNS tools for checks (dig)
+  ansible.builtin.apt:
+    name: dnsutils
+    state: present
+
+- name: Check whether Pi-hole is installed
+  ansible.builtin.stat:
+    path: /usr/local/bin/pihole
+  register: pihole_binary
+
+- name: Install Pi-hole unattended (first run only)
+  when: not pihole_binary.stat.exists
+  block:
+    - name: Configuration directory present
+      ansible.builtin.file:
+        path: /etc/pihole
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    # The v6 installer runs unattended only when pihole.toml exists; an empty one gives the
+    # defaults, and the settings below are applied afterwards.
+    - name: Empty pihole.toml so the installer runs unattended
+      ansible.builtin.copy:
+        dest: /etc/pihole/pihole.toml
+        content: ""
+        force: false
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Installer downloaded
+      ansible.builtin.get_url:
+        url: "{{ pihole_installer_url }}"
+        dest: /root/pihole-install.sh
+        mode: "0700"
+
+    # Its output includes a generated web password; it is not registered or printed. Set your
+    # own with `sudo pihole setpassword` (docs/runbooks/dns.md).
+    - name: Pi-hole installed
+      ansible.builtin.command: bash /root/pihole-install.sh --unattended
+      args:
+        creates: /usr/local/bin/pihole
+      no_log: true
+
+- name: Pi-hole settings applied
+  ansible.builtin.shell: |
+    set -eu
+    before="$(pihole-FTL --config {{ item.key }})"
+    pihole-FTL --config {{ item.key }} {{ (item.value | to_json if item.value is iterable and item.value is not string else item.value | string) | quote }} > /dev/null
+    after="$(pihole-FTL --config {{ item.key }})"
+    if [ "$before" = "$after" ]; then echo unchanged; else echo changed; fi
+  args:
+    executable: /bin/bash
+  loop: "{{ pihole_settings | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  register: pihole_setting
+  # FTL applies a setting set through its CLI at once; no restart needed.
+  changed_when: "'changed' in pihole_setting.stdout"
+
+- name: Local name resolves through Pi-hole
+  ansible.builtin.command: dig +short @127.0.0.1 {{ pihole_check_name }}
+  register: pihole_dig
+  changed_when: false
+  failed_when: pihole_dig.stdout.strip() != pihole_check_address
+  retries: 5
+  delay: 3
+  until: pihole_dig.stdout.strip() == pihole_check_address
+  when: not ansible_check_mode
