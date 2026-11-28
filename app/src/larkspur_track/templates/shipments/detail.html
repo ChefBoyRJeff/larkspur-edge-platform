@@ -2,30 +2,65 @@
 {% block title %}{{ shipment.tracking_number }} · Larkspur Track{% endblock %}
 {% block content %}
 <p><a href="/shipments">&larr; All shipments</a></p>
-<h1>{{ shipment.tracking_number }} <span class="status">{{ shipment.status }}</span></h1>
-<p><strong>Consignee:</strong> {{ shipment.consignee }}<br><strong>Destination:</strong> {{ shipment.destination }}</p>
+<h1>{{ shipment.tracking_number }} <span class="status {{ shipment.status }}">{{ shipment.status }}</span></h1>
+<div class="panel">
+<dl class="facts">
+  <dt>Customer</dt><dd>{{ shipment.customer.name }}</dd>
+  <dt>Consignee</dt><dd>{{ shipment.consignee }}</dd>
+  <dt>Destination</dt><dd>{{ shipment.destination }}</dd>
+  {% if shipment.bin %}<dt>Bin</dt><dd>{{ shipment.bin.code }}</dd>{% endif %}
+  {% if shipment.dock_door %}<dt>Dock door</dt><dd>{{ shipment.dock_door.code }}</dd>{% endif %}
+  {% if shipment.carrier %}<dt>Carrier</dt><dd>{{ shipment.carrier.name }}</dd>{% endif %}
+</dl>
+</div>
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
 {% if next_status and not may_advance %}
 <p class="muted">A {{ role_needed }} marks this shipment as {{ next_status }}.</p>
 {% elif next_status %}
+<section>
+<h2>Next step: {{ next_status }}</h2>
 <form class="stack" method="post" action="/shipments/{{ shipment.id }}/advance">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <input type="hidden" name="target" value="{{ next_status }}">
+  {% if next_status == "stored" %}
+  <label for="bin_id">Bin</label>
+  <select id="bin_id" name="bin_id" required>
+    <option value="">Choose a bin</option>
+    {% for bin in bins %}<option value="{{ bin.id }}">{{ bin.code }}</option>{% endfor %}
+  </select>
+  {% elif next_status == "picked" %}
+  <label for="dock_door_id">Dock door</label>
+  <select id="dock_door_id" name="dock_door_id" required>
+    <option value="">Choose a dock door</option>
+    {% for door in dock_doors %}<option value="{{ door.id }}">{{ door.code }}</option>{% endfor %}
+  </select>
+  <label for="carrier_id">Carrier</label>
+  {% if carriers %}
+  <select id="carrier_id" name="carrier_id" required>
+    <option value="">Choose a carrier</option>
+    {% for carrier in carriers %}<option value="{{ carrier.id }}">{{ carrier.name }}</option>{% endfor %}
+  </select>
+  {% else %}
+  <p class="muted">No carriers yet. A supervisor adds them on the <a href="/setup">Setup</a> page.</p>
+  {% endif %}
+  {% endif %}
   <label for="note">Note (optional)</label>
   <textarea id="note" name="note" maxlength="500"></textarea>
   <button type="submit">Mark as {{ next_status }}</button>
 </form>
+</section>
 {% else %}
 <p>This shipment has shipped. There are no further steps.</p>
 {% endif %}
 <h2>Timeline</h2>
 <table>
-  <thead><tr><th>When</th><th>Change</th><th>By</th><th>Note</th></tr></thead>
+  <thead><tr><th>When</th><th>Change</th><th>Recorded</th><th>By</th><th>Note</th></tr></thead>
   <tbody>
   {% for event in shipment.events %}
     <tr>
       <td>{{ event.occurred_at | local_time }}</td>
       <td>{% if event.from_status %}{{ event.from_status }} → {% endif %}{{ event.to_status }}</td>
+      <td>{{ event.detail or "" }}</td>
       <td>{{ event.actor.display_name if event.actor else "" }}</td>
       <td>{{ event.note or "" }}</td>
     </tr>

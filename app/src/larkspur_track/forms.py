@@ -1,6 +1,7 @@
 """Validation for shipment forms. Pure functions: no database and no web framework."""
 
 import re
+import uuid
 from dataclasses import dataclass
 
 TRACKING_NUMBER = re.compile(r"[A-Z0-9-]{4,40}")
@@ -55,3 +56,11 @@ def parse_shipment_form(
     if errors:
         return None, errors
     return ShipmentInput(tracking, consignee_clean, destination_clean, note_clean), {}
+
+
+def parse_uuid(value: str) -> uuid.UUID | None:
+    """A form's id field: None when it is empty or not an id."""
+    try:
+        return uuid.UUID(value.strip())
+    except ValueError:
+        return None

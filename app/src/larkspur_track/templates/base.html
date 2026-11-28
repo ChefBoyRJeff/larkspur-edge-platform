@@ -42,6 +42,7 @@
     {% if current_user %}
     <a href="/shipments">Shipments</a>
     <a href="/dashboard">Dashboard</a>
+    {% if is_supervisor %}<a href="/setup">Setup</a>{% endif %}
     {% if is_supervisor %}<a href="/audit">Audit</a>{% endif %}
     {% if is_admin %}<a href="/admin/users">Users</a>{% endif %}
     <span class="who">{{ current_user.display_name }} ({{ current_user.role }})</span>

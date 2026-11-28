@@ -5,6 +5,19 @@
 <h1>Receive a shipment</h1>
 <form class="stack" method="post" action="/shipments">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <label for="customer_id">Customer</label>
+  {% if customers %}
+  <select id="customer_id" name="customer_id" required>
+    <option value="">Choose a customer</option>
+    {% for customer in customers %}
+    <option value="{{ customer.id }}"{% if values.customer_id == customer.id|string %} selected{% endif %}>{{ customer.name }}</option>
+    {% endfor %}
+  </select>
+  {% else %}
+  <p class="muted">No customers yet. A supervisor adds them on the <a href="/setup">Setup</a> page.</p>
+  {% endif %}
+  {% if errors.customer_id %}<p class="error">{{ errors.customer_id }}</p>{% endif %}
+
   <label for="tracking_number">Tracking number</label>
   <input id="tracking_number" name="tracking_number" value="{{ values.tracking_number }}" required maxlength="40">
   {% if errors.tracking_number %}<p class="error">{{ errors.tracking_number }}</p>{% endif %}

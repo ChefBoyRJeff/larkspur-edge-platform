@@ -9,7 +9,7 @@ from conftest import MakeUser
 from larkspur_track.models import OutboxEvent, Shipment, ShipmentEvent
 from larkspur_track.outbox import RECEIVED, STATUS_CHANGED, event_payload
 from larkspur_track.roles import UserRole
-from larkspur_track.services import advance_shipment, create_shipment
+from larkspur_track.services import StepDetails, advance_shipment, create_shipment
 from larkspur_track.workflow import ShipmentStatus
 
 
@@ -44,22 +44,31 @@ def test_receiving_a_shipment_queues_one_event(db_session: Session) -> None:
             "tracking_number": "LRK-OUT-0001",
             "consignee": "Acme Retail (fictional)",
             "destination": "Dock 4, Greensboro NC",
+            "customer": "Unassigned",
+            "bin": None,
+            "dock_door": None,
+            "carrier": None,
         },
         "from_status": None,
         "to_status": "received",
         "note": "pallet 3 of 4",
+        "detail": None,
         "actor": None,
     }
     assert row.payload["occurred_at"].endswith("Z")
 
 
 def test_each_status_change_queues_an_event_in_order(
-    db_session: Session, make_user: MakeUser
+    db_session: Session, make_user: MakeUser, step_details: StepDetails
 ) -> None:
     clerk = make_user("cal.clerk", UserRole.CLERK)
     shipment = _new(db_session, actor_id=clerk.id)
-    advance_shipment(db_session, shipment.id, ShipmentStatus.STORED, actor_id=clerk.id)
-    advance_shipment(db_session, shipment.id, ShipmentStatus.PICKED, note="aisle 7")
+    advance_shipment(
+        db_session, shipment.id, ShipmentStatus.STORED, actor_id=clerk.id, details=step_details
+    )
+    advance_shipment(
+        db_session, shipment.id, ShipmentStatus.PICKED, note="aisle 7", details=step_details
+    )
 
     rows = _outbox(db_session)
     assert [(r.event_type, r.payload["from_status"], r.payload["to_status"]) for r in rows] == [
@@ -120,8 +129,14 @@ def test_migration_queues_events_recorded_before_the_outbox(
                 session.scalars(select(ShipmentEvent).order_by(ShipmentEvent.occurred_at))
             )
             assert [r.event_id for r in rows] == [e.id for e in events]
-            # The backfill builds the same payload as the application does.
-            assert [r.payload for r in rows] == [event_payload(shipment, e, None) for e in events]
+            # The backfill builds the same payload as the application does, without the fields
+            # added after it (customer, locations, carrier, detail).
+            expected = [event_payload(shipment, e, None) for e in events]
+            for payload in expected:
+                payload.pop("detail")
+                for field in ("customer", "bin", "dock_door", "carrier"):
+                    payload["shipment"].pop(field)
+            assert [r.payload for r in rows] == expected
             assert rows[0].payload["occurred_at"] == "2026-11-20T10:00:00.123456Z"
             assert [r.sent_at for r in rows] == [None, None]
     finally:

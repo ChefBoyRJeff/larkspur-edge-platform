@@ -10,16 +10,17 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine, create_engine, select
 from sqlalchemy.orm import Session
 
 from larkspur_track.auth import session_cookie_name
 from larkspur_track.config import Settings, get_settings
 from larkspur_track.db import get_engine, get_session
 from larkspur_track.main import app
-from larkspur_track.models import User
+from larkspur_track.models import Carrier, Customer, Location, User
 from larkspur_track.passwords import hash_password
 from larkspur_track.roles import UserRole
+from larkspur_track.services import StepDetails
 from larkspur_track.sessions import start_session
 
 APP_DIR = Path(__file__).resolve().parents[1]
@@ -27,6 +28,8 @@ APP_DIR = Path(__file__).resolve().parents[1]
 PHRASE = "correct horse battery staple"
 # HTTPS, as in the cluster, so the client keeps and sends Secure cookies.
 BASE_URL = "https://testserver"
+TEST_CUSTOMER = "Test Customer (fictional)"
+TEST_CARRIER = "Test Freight (fictional)"
 
 
 def _reset_database_caches() -> None:
@@ -103,6 +106,29 @@ def fresh_settings() -> Iterator[None]:
     get_settings.cache_clear()
 
 
+@pytest.fixture
+def step_details(db_session: Session) -> StepDetails:
+    """A bin and a dock door from the migration's layout, and a test carrier."""
+    bin_ = db_session.scalars(select(Location).where(Location.code == "A-01-1")).one()
+    door = db_session.scalars(select(Location).where(Location.code == "D1")).one()
+    carrier = db_session.scalars(select(Carrier).where(Carrier.name == TEST_CARRIER)).first()
+    if carrier is None:
+        carrier = Carrier(name=TEST_CARRIER, is_active=True)
+        db_session.add(carrier)
+        db_session.flush()
+    return StepDetails(bin_id=bin_.id, dock_door_id=door.id, carrier_id=carrier.id)
+
+
+@pytest.fixture
+def test_customer(db_session: Session) -> Customer:
+    customer = db_session.scalars(select(Customer).where(Customer.name == TEST_CUSTOMER)).first()
+    if customer is None:
+        customer = Customer(name=TEST_CUSTOMER, is_active=True)
+        db_session.add(customer)
+        db_session.flush()
+    return customer
+
+
 @pytest.fixture(scope="session")
 def phrase_hash() -> str:
     """Argon2 is slow on purpose, so all test users share one hash of PHRASE."""
@@ -137,9 +163,15 @@ def make_user(db_session: Session, phrase_hash: str) -> MakeUser:
 
 
 class SignedInClient(TestClient):
-    """A test client with a session cookie. Its POSTs send the session's CSRF token."""
+    """A test client with a session cookie. Its POSTs send the session's CSRF token.
+
+    Unless a test passes with_defaults=False, receiving a shipment also sends the test customer,
+    and advancing one sends a bin, a dock door and a carrier, so tests about other things need not
+    repeat them. Tests of those fields send their own values or switch the defaults off.
+    """
 
     csrf_token: str
+    defaults: dict[str, str]
 
     def post(  # type: ignore[override]
         self,
@@ -147,11 +179,17 @@ class SignedInClient(TestClient):
         *,
         data: dict[str, str] | None = None,
         with_csrf: bool = True,
+        with_defaults: bool = True,
         **kwargs: Any,
     ) -> httpx2.Response:
         form = dict(data or {})
         if with_csrf:
             form.setdefault("csrf_token", self.csrf_token)
+        if with_defaults and url == "/shipments":
+            form.setdefault("customer_id", self.defaults["customer_id"])
+        if with_defaults and url.endswith("/advance"):
+            for field in ("bin_id", "dock_door_id", "carrier_id"):
+                form.setdefault(field, self.defaults[field])
         return super().post(url, data=form, **kwargs)
 
 
@@ -172,13 +210,24 @@ def anonymous_client(use_test_session: None) -> TestClient:
 
 
 @pytest.fixture
-def sign_in_as(db_session: Session, use_test_session: None) -> Callable[[User], SignedInClient]:
+def sign_in_as(
+    db_session: Session,
+    use_test_session: None,
+    test_customer: Customer,
+    step_details: StepDetails,
+) -> Callable[[User], SignedInClient]:
     """A client signed in as the given user (the sign-in page itself is in test_sign_in.py)."""
 
     def _sign_in(user: User) -> SignedInClient:
         token, row = start_session(db_session, user, datetime.now(UTC))
         signed_in = SignedInClient(app, base_url=BASE_URL, follow_redirects=False)
         signed_in.csrf_token = row.csrf_token
+        signed_in.defaults = {
+            "customer_id": str(test_customer.id),
+            "bin_id": str(step_details.bin_id),
+            "dock_door_id": str(step_details.dock_door_id),
+            "carrier_id": str(step_details.carrier_id),
+        }
         signed_in.cookies.set(session_cookie_name(), token)
         return signed_in
 
